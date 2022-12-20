@@ -54,7 +54,7 @@ class GcnEncoderCell(nn.Module):
         value=torch.cat([hidden,tXin],dim=3) # batch*N*Tin*dmodel
 
         # 做attention
-        atten_mask=GcnEncoderCell.generate_square_subsequent_mask(B=query.size(0),N=query.size(1),T=query.size(2)).cuda() # batch*N*1*Tq*Ts
+        atten_mask=GcnEncoderCell.generate_square_subsequent_mask(B=query.size(0),N=query.size(1),T=query.size(2)).to(self.device) # batch*N*1*Tq*Ts
         value,atten=self.temporalAttention.forward(query=query,key=key,value=value,atten_mask=atten_mask) # batch*N*T*dmodel
 
         # 做gate
