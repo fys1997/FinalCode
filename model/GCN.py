@@ -16,18 +16,13 @@ class GCN(nn.Module):
         self.tradGcn = tradGcn
         self.dropout = nn.Dropout(p=dropout)
 
-        # 设置通过时间学习图矩阵的参数
-        self.time2AdjLinear=nn.Linear(in_features=dmodel,out_features=N) # 学习邻接矩阵 batch*Tin*N*dmodel-> batch*Tin*N*N
+        # 设置自适应邻接矩阵
+        self.trainMatrix1=nn.Parameter(torch.randn(N,M).to(device),requires_grad=True).to(device)
+        self.trainMatrix2=nn.Parameter(torch.randn(M,N).to(device),requires_grad=True).to(device)
 
         # 设置GCN增强的矩阵分解的维度
         self.trainW1=nn.Parameter(torch.randn(N,M).to(device),requires_grad=True).to(device) # N*M
         self.trainW2=nn.Parameter(torch.randn(M,dmodel*dmodel),requires_grad=True).to(device) # M*(dmodel*dmodel)
-
-        # 设置动态邻接矩阵自学习层
-        self.alpha1AdjLearning = nn.Parameter(torch.randn(N,M).to(device),requires_grad=True).to(device) # N*M
-        self.alpha2AdjLearning = nn.Parameter(torch.randn(M,N).to(device),requires_grad=True).to(device) # M*N
-        self.beta1AdjLearning = nn.Parameter(torch.randn(N,M).to(device),requires_grad=True).to(device) # N*M
-        self.beta2AdjLearning = nn.Parameter(torch.randn(M,N).to(device),requires_grad=True).to(device) # M*N
 
         # 运用传统图卷积
         self.tradGcn = tradGcn
@@ -47,10 +42,8 @@ class GCN(nn.Module):
         """
         # 开始动态学习生成拉普拉斯矩阵 A=Relu(alpha*sin(timeEmbedding)+beta)
         timeEmbedding=timeEmbedding.permute(0,2,1,3).contiguous() # batch*Tin*N*dmodel
-        A = torch.sin(self.time2AdjLinear(timeEmbedding)) # batch*Tin*N*N 得到对应的邻接矩阵转换
-        A = torch.einsum("nk,btnk->btnk",(torch.mm(self.alpha1AdjLearning,self.alpha2AdjLearning),A)) # batch*Tin*N*N
-        A = A+torch.mm(self.beta1AdjLearning,self.beta2AdjLearning) # batch*Tin*N*N
-        A = F.relu(A)
+        A = F.relu(torch.mm(self.trainMatrix1,self.trainMatrix2)) # N*N
+        A = F.softmax(A,dim=1) # N*N
 
         H = list()
         X = X.permute(0,3,2,1).contiguous() # batch*Tin*node*dmodel
@@ -63,7 +56,7 @@ class GCN(nn.Module):
             W = torch.reshape(W, (self.N, self.dmodel, self.dmodel))  # N*dmodel*dmodel
             for k in range(self.hops):
                 # 完成AX
-                Hnow=torch.einsum("btnk,btkd->btnd", (A, Hbefore)) # batch*Tin*node*dmodel
+                Hnow=torch.einsum("nk,btkd->btnd", (A, Hbefore)) # batch*Tin*node*dmodel
                 # 完成XW
                 Hnow=Hnow.permute(0,2,1,3).contiguous() # bacth*N*Tin*dmodel
                 Hnow=torch.einsum("bntk,nkd->bntd",(Hnow,W)) # batch*N*Tin*dmodel
