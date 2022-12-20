@@ -3,6 +3,7 @@ import torch.nn as nn
 import model.PositionEmbedding as PE
 import model.timeEmbedding as TE
 
+# no usage
 
 class Transformer(nn.Module):
     def __init__(self, dmodel, cnn_in_channels, cnn_out_channels, nhead,

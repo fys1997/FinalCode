@@ -3,6 +3,7 @@ import argparse
 import numpy as np
 import pandas as pd
 import torch
+from model.model import mixNet
 
 
 parser=argparse.ArgumentParser()
@@ -19,22 +20,27 @@ parser.add_argument('--data',type=str,default='data/METR-LA-12/',help='data path
 parser.add_argument('--batch_size',type=int,default=64,help='batch size')
 parser.add_argument('--epochs',type=int,default=20,help='')
 parser.add_argument('--print_every',type=int,default=100,help='')
-parser.add_argument('--save',type=str,default='modelSave/metr-12.pt',help='save path')
+parser.add_argument('--save',type=str,default='modelSave/metr.pkl',help='save path')
 parser.add_argument('--tradGcn',type=bool,default=False,help='whether use tradGcn')
 parser.add_argument('--horzion',type=int,default=12,help='output sequenth length')
 args=parser.parse_args()
 
 
 def main():
+    dataloader = util.load_dataset(args.data, args.batch_size, args.batch_size, args.batch_size)
     device=torch.device(args.device if torch.cuda.is_available() else "cpu")
 
     # load the best saved model
+    T = dataloader['T']
+    N = dataloader['N']
+    outputT = dataloader['outputT']
+    model=mixNet(args=args,device=args.device,T=T,N=N,outputT=outputT)
     with open(args.save,'rb') as f:
-        model=torch.load(f)
+        model.load_state_dict(torch.load(f))
         model.to(device)
         model.eval()
         print("model load successfully")
-    dataloader=util.load_dataset(args.data,args.batch_size,args.batch_size,args.batch_size)
+
     scaler=dataloader['scaler']
 
     mae=[]

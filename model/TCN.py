@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import model.GCN as GCN
 
 
+# no usage
 class TCN(nn.Module):
     def __init__(self,Tin,Tout,trainMatrix1,trainMatrix2,channels,device, hops, tradGcn=False,
                  blocks=4,kerner_size=2,dropout=0.1,layers=2):

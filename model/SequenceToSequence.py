@@ -6,6 +6,7 @@ import model.GCN as gcn
 import model.timeEmbedding as TE
 
 
+# no usage
 class Encoder(nn.Module):
     def __init__(self,inputSize,hiddenSize,n_layers,dropout):
         """

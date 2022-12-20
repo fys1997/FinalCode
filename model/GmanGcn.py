@@ -8,14 +8,12 @@ import numpy as np
 
 
 class GcnEncoderCell(nn.Module):
-    def __init__(self,N, trainMatrix1, trainMatrix2,hops,device,tradGcn,dropout,dmodel,num_heads,Tin):
+    def __init__(self,N,hops,device,tradGcn,dropout,dmodel,num_heads,Tin,M):
         """
 
         :param num_embedding: 有多少组时间，此处288
         :param embedding_dim:
         :param Tin:
-        :param trainMatrix1:
-        :param trainMatrix2:
         :param hops: gcn 跳数
         :param device:
         :param tradGcn:
@@ -23,18 +21,17 @@ class GcnEncoderCell(nn.Module):
         :param dmodel:
         :param num_heads:
         :param Tin: 输入时间的长度
+        :param M: 跟GCN矩阵特性增强有关的做矩阵分解的维度值M
         """
         super(GcnEncoderCell, self).__init__()
-        self.temporalAttention=TemMulHeadAtte(dmodel=dmodel,num_heads=num_heads,dropout=dropout,device=device)
+        self.temporalAttention=TemMulHeadAtte(dmodel=dmodel,num_heads=num_heads,dropout=dropout,device=device,M=M,N=N)
 
         self.device=device
         # 设置gate门
         self.gate=nn.Linear(in_features=2*dmodel,out_features=dmodel)
-        self.batchNorm=nn.BatchNorm2d(num_features=dmodel)
         # 设置图卷积层捕获空间特征
-        self.Gcn=GCN.GCN(T=Tin,trainMatrix1=trainMatrix1,trainMatrix2=trainMatrix2,device=device,tradGcn=tradGcn,dropout=dropout,hops=hops,dmodel=dmodel)
-
-
+        self.Gcn=GCN.GCN(Tin=Tin, N=N, device=device, tradGcn=tradGcn,
+                         dropout=dropout, hops=hops, dmodel=dmodel, M=M)
 
     def forward(self,hidden,tXin):
         """
@@ -44,31 +41,15 @@ class GcnEncoderCell(nn.Module):
         :param tXin: 加了timeEmbedding的x值：tXin:[batch*N*Tin*dmodel]
         :return:
         """
-        # 先捕获空间依赖
-
-        # spaceQuery=torch.cat([hidden,tXin],dim=3) # batch*N*Tin*2dmodel
-        # spaceQuery=spaceQuery.permute(0,2,1,3).contiguous() # batch*Tin*N*2dmodel
-        #
-        # spaceKey=torch.cat([hidden,tXin],dim=3)
-        # spaceKey=spaceKey.permute(0,2,1,3).contiguous() # batch*Tin*N*2dmodel
-        #
-        # spaceValue=hidden.clone() # batch*N*Tin*dmodel
-        # spaceValue=spaceValue.permute(0,2,1,3).contiguous() # batch*Tin*N*dmodel
-        #
-        # spaceValue,spaceAtten=self.spaceAtten(query=spaceQuery,key=spaceKey,value=spaceValue,atten_mask=None) # batch*T*N*dmodel
-        # spaceValue=spaceValue.permute(0,2,1,3).contiguous() # batch*N*T*dmodel
-        # 捕获时间依赖
         # GCN捕获空间依赖
-        gcnOutput=self.Gcn(hidden.permute(0,3,1,2).contiguous()) # batch*dmodel*N*T
+        gcnOutput=self.Gcn(hidden.permute(0,3,1,2).contiguous(),tXin) # batch*dmodel*N*T
         gcnOutput=gcnOutput.permute(0,2,3,1).contiguous() # batch*N*T*dmodel
 
         # 捕获时间依赖
 
         key=torch.cat([hidden,tXin],dim=3) # batch*N*Tin*2dmodel
 
-
         query=torch.cat([hidden,tXin],dim=3) # batch*N*Tin*2dmodel
-
 
         value=torch.cat([hidden,tXin],dim=3) # batch*N*Tin*dmodel
 
@@ -80,9 +61,8 @@ class GcnEncoderCell(nn.Module):
         gateInput=torch.cat([gcnOutput,value],dim=3) # batch*N*Tin*2dmodel
         gateInput=self.gate(gateInput) # batch*N*Tin*dmodel
         gateInput=gateInput.permute(0,3,1,2).contiguous() # batch*dmodel*N*Tin
-        z=torch.sigmoid(self.batchNorm(gateInput).permute(0,2,3,1).contiguous()) # batch*N*Tin*dmodel
+        z=torch.sigmoid(gateInput.permute(0,2,3,1).contiguous()) # batch*N*Tin*dmodel
         finalHidden=z*gcnOutput+(1-z)*value # batch*N*Tin*dmodel
-        # finalHidden=torch.sigmoid(gcnOutput+out)*torch.tanh(gcnOutput+out)
 
         return finalHidden+hidden # batch*N*Tin*dmodel
 
@@ -95,20 +75,21 @@ class GcnEncoderCell(nn.Module):
 
 
 class GcnEncoder(nn.Module):
-    def __init__(self,num_embedding,N, trainMatrix1, trainMatrix2,hops,device,tradGcn,
-                 dropout,dmodel,num_heads,Tin,encoderBlocks):
+    def __init__(self,num_embedding,N,hops,device,tradGcn,
+                 dropout,dmodel,num_heads,Tin,encoderBlocks,M):
         super(GcnEncoder, self).__init__()
         self.encoderBlock=nn.ModuleList()
         for i in range(encoderBlocks):
-            self.encoderBlock.append(GcnEncoderCell(N=N,trainMatrix1=trainMatrix1,trainMatrix2=trainMatrix2,hops=hops,device=device,
-                                           tradGcn=tradGcn,dropout=dropout,dmodel=dmodel,num_heads=num_heads,Tin=Tin))
+            self.encoderBlock.append(GcnEncoderCell(N=N, hops=hops, device=device, tradGcn=tradGcn,
+                                                    dropout=dropout, dmodel=dmodel, num_heads=num_heads, Tin=Tin,
+                                                    M=M))
         self.timeEmbed=TE.timeEmbedding(num_embedding=num_embedding,embedding_dim=dmodel,dropout=dropout)
         self.device=device
         self.encoderBlocks=encoderBlocks
 
         self.xFull=nn.Linear(in_features=1,out_features=dmodel)
 
-    def forward(self,x,tx,ty,spaceEmbed):
+    def forward(self,x,tx,ty):
         """
 
         :param x: 流量数据:[batch*N*Tin*1]
@@ -119,53 +100,48 @@ class GcnEncoder(nn.Module):
         """
         x=self.xFull(x) # batch*N*Tin*dmodel
         tx=self.timeEmbed(tx) # batch*N*Tin*dmodel
-
-        tXin=tx.permute(0,2,1,3).contiguous()+spaceEmbed # batch*Tin*N*dmodel
-        tXin=tXin.permute(0,2,1,3).contiguous() # batch*N*Tin*dmodel
-
         ty=self.timeEmbed(ty) # batch*N*Tout*dmodel
         hidden=x # batch*N*Tin*dmodel
         skip=0
         for i in range(self.encoderBlocks):
-            hidden=self.encoderBlock[i].forward(hidden=hidden,tXin=tXin) # Tin*batch*N
+            hidden=self.encoderBlock[i].forward(hidden=hidden,tXin=tx) # Tin*batch*N
             skip = skip + hidden
 
         return skip+x,ty
 
 
 class GcnDecoder(nn.Module):
-    def __init__(self,N,dmodel,Tout,Tin,num_heads,dropout,device,trainMatrix1,trainMatrix2,hops,tradGcn):
+    def __init__(self,N,dmodel,Tout,Tin,num_heads,dropout,device,hops,tradGcn,M):
         super(GcnDecoder, self).__init__()
-        self.predict=nn.Linear(dmodel,1)
+        self.predictTrainMatrix1=nn.Parameter(torch.randn(N,M).to(device),requires_grad=True).to(device) # N*M
+        self.predictTrainMatrix2=nn.Parameter(torch.randn(M,dmodel),requires_grad=True).to(device) # M*dmodel
         self.projection=nn.Linear(Tin+Tout,Tout)
         self.xTinToutCNN=nn.Conv2d(in_channels=Tin,out_channels=Tout,kernel_size=(1,1))
-        self.GcnDecoderCell=GcnEncoderCell(N=N,trainMatrix1=trainMatrix1,trainMatrix2=trainMatrix2,hops=hops,device=device,
-                                           tradGcn=tradGcn,dropout=dropout,dmodel=dmodel,num_heads=num_heads,Tin=Tout)
+        self.GcnDecoderCell=GcnEncoderCell(N=N,hops=hops,device=device,
+                                           tradGcn=tradGcn,dropout=dropout,dmodel=dmodel,num_heads=num_heads,Tin=Tout,
+                                           M=M)
 
-    def forward(self,x,ty,spaceEmbed,vx):
+    def forward(self,x,ty):
         """
 
         :param x: # batch*N*Tin*dmodel
         :param ty: batch*N*Tout*dmodel
-        :param spaceEmbed : N*dmodel
-        :param vx: 原来的数据 [batch*N*Tin]
         :return:
         """
-        ty=ty.permute(0,2,1,3).contiguous()+spaceEmbed # batch*Tout*N*dmodel
+        ty=ty.permute(0,2,1,3).contiguous() # batch*Tout*N*dmodel
         x=x.permute(0,2,1,3).contiguous() # batch*Tin*N*dmodel
         x=self.xTinToutCNN(x) # batch*Tout*N*dmodel
         x=x.permute(0,2,1,3).contiguous() # batch*N*Tout*dmodel
         x=self.GcnDecoderCell.forward(hidden=x,tXin=ty.permute(0,2,1,3).contiguous()) # batch*N*Tout*dmodel
-        x=self.predict(x) # batch*N*Tout*1
-        x=x.squeeze(dim=3) # batch*N*Tout
-        # x=torch.cat([vx,x],dim=2) # batch*N*(Tin+Tout)
-        # x=self.projection(x)
+
+        predict = torch.mm(self.predictTrainMatrix1,self.predictTrainMatrix2) # N*d
+        x=torch.einsum("bntd,nd->bnt",(x,predict)) # batch*N*Tout
 
         return x # batch*N*Tout
 
 
 class TemMulHeadAtte(nn.Module):
-    def __init__(self,dmodel,num_heads,dropout,device):
+    def __init__(self,dmodel,num_heads,dropout,device,M,N):
         """
 
         :param dmodel: embeddings之后的每个V每个T时刻的size
@@ -176,13 +152,24 @@ class TemMulHeadAtte(nn.Module):
         self.num_heads=num_heads
         self.dropout=nn.Dropout(p=dropout)
         self.device=device
+        self.M=M
+        self.N=N
 
         d_keys=2*dmodel//num_heads
         d_values=2*dmodel//num_heads
 
-        self.query_projection=nn.Linear(in_features=2*dmodel,out_features=d_keys*num_heads)
-        self.key_projection=nn.Linear(in_features=2*dmodel,out_features=d_keys*num_heads)
-        self.value_projection=nn.Linear(in_features=2*dmodel,out_features=d_values*num_heads)
+        self.query_projection1=nn.Parameter(torch.randn(N*dmodel,M),requires_grad=True).to(device)
+        self.query_projection2=nn.Parameter(torch.randn(M,2*d_keys*num_heads),requires_grad=True).to(device)
+
+        self.key_projection1=nn.Parameter(torch.randn(N*dmodel,M),requires_grad=True).to(device)
+        self.key_projection2=nn.Parameter(torch.randn(M,2*d_keys*num_heads),requires_grad=True).to(device)
+
+        self.value_projection1=nn.Parameter(torch.randn(N*dmodel,M),requires_grad=True).to(device)
+        self.value_projection2=nn.Parameter(torch.randn(M,2*d_values*num_heads),requires_grad=True).to(device)
+
+        # self.query_projection=nn.Linear(in_features=2*dmodel,out_features=d_keys*num_heads)
+        # self.key_projection=nn.Linear(in_features=2*dmodel,out_features=d_keys*num_heads)
+        # self.value_projection=nn.Linear(in_features=2*dmodel,out_features=d_values*num_heads)
         self.out_projection=nn.Linear(in_features=d_values*num_heads,out_features=dmodel)
 
     def forward(self,query,key,value,atten_mask):
@@ -197,9 +184,20 @@ class TemMulHeadAtte(nn.Module):
         B,N,T,E=query.shape
         H=self.num_heads
 
-        query=F.relu(self.query_projection(query).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
-        key=F.relu(self.key_projection(key).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
-        value=F.relu(self.value_projection(value).view(B,N,T,H,-1)) # batch*N*T*heads*d_values
+        query_projection=torch.mm(self.query_projection1,self.query_projection2) # N*(dmodel*2*d_keys*num_heads)
+        query_projection=torch.reshape(query_projection,(self.N,2*self.dmodel,-1)) # N *(2dmodel)*(d_keys*num_heads)
+        key_projection=torch.mm(self.key_projection1,self.key_projection2) # N*(dmodel*2*d_keys*num_heads)
+        key_projection=torch.reshape(key_projection,(self.N,2*self.dmodel,-1)) # N*(2dmodel)*(d_keys*num_heads)
+        value_projection=torch.mm(self.value_projection1,self.value_projection2) # N*(dmodel*2*d_values*num_heads)
+        value_projection=torch.reshape(value_projection,(self.N,2*self.dmodel,-1)) # N*(2dmodel)*(d_values*num_heads)
+
+        query=F.relu(torch.einsum("bnti,nik->bntk",(query,query_projection)).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
+        key=F.relu(torch.einsum("bnti,nik->bntk",(key,key_projection)).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
+        value=F.relu(torch.einsum("bnti,nik->bntk",(value,value_projection)).view(B,N,T,H,-1)) # batch*N*T*heads*d_values
+
+        # query=F.relu(self.query_projection(query).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
+        # key=F.relu(self.key_projection(key).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
+        # value=F.relu(self.value_projection(value).view(B,N,T,H,-1)) # batch*N*T*heads*d_values
 
         scale=1./sqrt(query.size(4))
 
@@ -218,18 +216,18 @@ class TemMulHeadAtte(nn.Module):
 
 
 class GcnAtteNet(nn.Module):
-    def __init__(self,num_embedding,N, trainMatrix1, trainMatrix2,hops,device,tradGcn,
-                 dropout,dmodel,num_heads,Tin,Tout,encoderBlocks):
+    def __init__(self,num_embedding,N,hops,device,tradGcn,
+                 dropout,dmodel,num_heads,Tin,Tout,encoderBlocks,M):
         super(GcnAtteNet, self).__init__()
-        self.GcnEncoder=GcnEncoder(num_embedding=num_embedding,N=N,trainMatrix1=trainMatrix1,trainMatrix2=trainMatrix2,hops=hops,
+        self.GcnEncoder=GcnEncoder(num_embedding=num_embedding,N=N,hops=hops,
                                    device=device,tradGcn=tradGcn,dropout=dropout,dmodel=dmodel,num_heads=num_heads,
-                                   Tin=Tin,encoderBlocks=encoderBlocks)
+                                   Tin=Tin,encoderBlocks=encoderBlocks, M=M)
         self.GcnDecoder=GcnDecoder(N=N,dmodel=dmodel,Tout=Tout,Tin=Tin,num_heads=num_heads,dropout=dropout,device=device,
-                                   trainMatrix1=trainMatrix1,trainMatrix2=trainMatrix2,hops=hops,tradGcn=tradGcn)
+                                   hops=hops,tradGcn=tradGcn, M=M)
 
-    def forward(self,vx,tx,ty,spatialEmbed):
-        output, ty = self.GcnEncoder(vx.unsqueeze(dim=3), tx, ty, spatialEmbed)  # batch*N*Tin*dmodel
-        result = self.GcnDecoder(output, ty, spatialEmbed,vx=vx)  # batch*N*Tout
+    def forward(self,vx,tx,ty):
+        output, ty = self.GcnEncoder(vx.unsqueeze(dim=3), tx, ty)  # batch*N*Tin*dmodel
+        result = self.GcnDecoder(output, ty)  # batch*N*Tout
         return result
 
 

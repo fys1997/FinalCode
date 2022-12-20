@@ -6,10 +6,9 @@ import time
 from engine import trainer
 
 parser=argparse.ArgumentParser()
-parser.add_argument('--M',type=int,default=10,help='preTrained matrix dimensions')
+parser.add_argument('--M',type=int,default=10,help='GCN matrix W dimensions')
 parser.add_argument('--device',type=str,default='cuda:0',help='GPU cuda')
-parser.add_argument('--hops',type=int,default=5,help='GCN hops')
-parser.add_argument('--arSize',type=int,default=12,help='AutoRegressive window')
+parser.add_argument('--hops',type=int,default=4,help='GCN hops')
 parser.add_argument('--dropout',type=float,default=0.3,help='dropout')
 parser.add_argument('--head',type=int,default=8,help='the multihead count of attention')
 parser.add_argument('--lrate',type=float,default=0.001,help='learning rate')
@@ -18,19 +17,24 @@ parser.add_argument('--data',type=str,default='data/METR-LA-12/',help='data path
 parser.add_argument('--batch_size',type=int,default=32,help='batch size')
 parser.add_argument('--epochs',type=int,default=100,help='')
 parser.add_argument('--print_every',type=int,default=100,help='')
-parser.add_argument('--save',type=str,default='modelSave/metr-12.pt',help='save path')
+parser.add_argument('--save',type=str,default='modelSave/metr.pkl',help='save path')
 parser.add_argument('--tradGcn',type=bool,default=False,help='whether use tradGcn')
 parser.add_argument('--dmodel',type=int,default=64,help='transformerEncoder dmodel')
 parser.add_argument('--num_embedding',type=int,default=288,help='')
 parser.add_argument('--encoderBlocks',type=int,default=4,help=' encoder block numbers')
-parser.add_argument('--spatialEmbedding',type=str,default='data/sensor_graph/SE(METR).txt',help='the file save the spatial embedding')
-parser.add_argument('--preTrain',action='store_true',help='whether use preTrain model')
-parser.add_argument('--lr_epochs',type=int,default=30,help='decide when we should decrease the lr')
+parser.add_argument('--preTrain',type=bool,default=False,help='whether use preTrain model')
+parser.add_argument('--seed',type=int,default=1023,help='random seed')
+
 
 args=parser.parse_args()
 
+
 def main():
     device=torch.device(args.device if torch.cuda.is_available() else "cpu")
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
+    else:
+        torch.manual_seed(args.seed)
     dataloader=util.load_dataset(args.data,args.batch_size,args.batch_size,args.batch_size)
     scaler=dataloader['scaler']
     T=dataloader['T']
@@ -43,6 +47,7 @@ def main():
     his_loss=[]
     val_time=[]
     train_time=[]
+    # 加载预训练模型设置最小loss初始值
     if args.preTrain is not None and args.preTrain:
         loss=[]
         for iter,(x,y) in enumerate(dataloader['val_loader'].get_iterator()):
@@ -54,8 +59,9 @@ def main():
         print("preTrain best valid loss:",best_valid_loss)
     else:
         best_valid_loss = 10000000
+
+    # 开始训练
     for i in range(1,args.epochs+1):
-        engine.adjust_lr(i=i,epochs=args.lr_epochs)
         train_loss=[]
         train_mape=[]
         train_rmse=[]
@@ -100,7 +106,8 @@ def main():
         his_loss.append(mvalid_loss)
         if mvalid_loss<best_valid_loss:
             with open(args.save, "wb") as f:
-                torch.save(engine.model, f)
+                # 保存最佳模型
+                torch.save(engine.model.state_dict(), f)
                 print("best model saved")
             best_valid_loss = mvalid_loss
 
@@ -115,6 +122,7 @@ def main():
 
     print("Training finished")
     print("The valid loss on best model is", str(round(best_valid_loss, 4)))
+
 
 if __name__=="__main__":
     t1=time.time()
