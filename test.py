@@ -7,29 +7,31 @@ from model.model import mixNet
 
 
 parser=argparse.ArgumentParser()
-parser.add_argument('--M',type=int,default=10,help='preTrained matrix dimensions')
+parser.add_argument('--M',type=int,default=10,help='GCN matrix W dimensions')
 parser.add_argument('--device',type=str,default='cuda:0',help='GPU cuda')
-parser.add_argument('--hops,',type=int,default=10,help='GCN hops')
-parser.add_argument('--arSize',type=int,default=6,help='AutoRegressive window')
-parser.add_argument('--dropout',type=float,default=0.1,help='dropout')
-parser.add_argument('--head',type=int,default=8,help='the multihead count of transformer')
-parser.add_argument('--transformerLayers',type=int,default=1,help='the layer count of transformerEncode')
+parser.add_argument('--hops',type=int,default=4,help='GCN hops')
+parser.add_argument('--dropout',type=float,default=0.3,help='dropout')
+parser.add_argument('--head',type=int,default=8,help='the multihead count of attention')
 parser.add_argument('--lrate',type=float,default=0.001,help='learning rate')
 parser.add_argument('--wdeacy',type=float,default=0.0001,help='weight decay rate')
 parser.add_argument('--data',type=str,default='data/METR-LA-12/',help='data path')
-parser.add_argument('--batch_size',type=int,default=64,help='batch size')
-parser.add_argument('--epochs',type=int,default=20,help='')
+parser.add_argument('--batch_size',type=int,default=32,help='batch size')
+parser.add_argument('--epochs',type=int,default=100,help='')
 parser.add_argument('--print_every',type=int,default=100,help='')
 parser.add_argument('--save',type=str,default='modelSave/metr.pkl',help='save path')
 parser.add_argument('--tradGcn',type=bool,default=False,help='whether use tradGcn')
-parser.add_argument('--horzion',type=int,default=12,help='output sequenth length')
+parser.add_argument('--dmodel',type=int,default=64,help='transformerEncoder dmodel')
+parser.add_argument('--num_embedding',type=int,default=288,help='')
+parser.add_argument('--encoderBlocks',type=int,default=4,help=' encoder block numbers')
+parser.add_argument('--preTrain',type=bool,default=False,help='whether use preTrain model')
+parser.add_argument('--seed',type=int,default=1023,help='random seed')
 args=parser.parse_args()
 
 
 def main():
     dataloader = util.load_dataset(args.data, args.batch_size, args.batch_size, args.batch_size)
     device=torch.device(args.device if torch.cuda.is_available() else "cpu")
-
+    print(args)
     # load the best saved model
     T = dataloader['T']
     N = dataloader['N']
