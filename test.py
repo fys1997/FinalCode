@@ -77,7 +77,7 @@ def main():
     amae = []
     amape = []
     armse = []
-    for i in range(args.horzion):
+    for i in range(outputT):
         pred = scaler.inverse_transform(yhat[:, i, :])
         real = realy[:, i, :,0]
         metrics = util.metric(pred, real)
