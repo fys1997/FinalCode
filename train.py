@@ -105,10 +105,9 @@ def main():
         mvalid_rmse=np.mean(valid_rmse)
         his_loss.append(mvalid_loss)
         if mvalid_loss<best_valid_loss:
-            with open(args.save, "wb") as f:
-                # 保存最佳模型
-                torch.save(engine.model.state_dict(), f)
-                print("best model saved")
+            # 保存最佳模型
+            torch.save(engine.model.state_dict(), args.save)
+            print("best model saved")
             best_valid_loss = mvalid_loss
 
         log = 'Epoch: {:03d}, Train Loss: {:.4f}, Train MAPE: {:.4f}, Train RMSE: {:.4f}, Valid Loss: {:.4f}, Valid MAPE: {:.4f}, Valid RMSE: {:.4f}, Training Time: {:.4f}/epoch'

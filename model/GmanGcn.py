@@ -113,10 +113,12 @@ class GcnEncoder(nn.Module):
 class GcnDecoder(nn.Module):
     def __init__(self,N,dmodel,Tout,Tin,num_heads,dropout,device,hops,tradGcn,M):
         super(GcnDecoder, self).__init__()
-        self.predictTrainMatrix1=nn.Parameter(torch.randn(N,M).to(device),requires_grad=True).to(device) # N*M
-        self.predictTrainMatrix2=nn.Parameter(torch.randn(M,dmodel),requires_grad=True).to(device) # M*dmodel
-        self.projection=nn.Linear(Tin+Tout,Tout)
-        self.xTinToutCNN=nn.Conv2d(in_channels=Tin,out_channels=Tout,kernel_size=(1,1))
+        self.N=N
+        self.Tin=Tin
+        self.Tout=Tout
+        self.dmodelCNN=nn.Conv2d(in_channels=dmodel,out_channels=1,kernel_size=(1,1))
+        self.TinToutTrainMatrix1=nn.Parameter(torch.randn(N,M).to(device),requires_grad=True).to(device) # N*M
+        self.TinToutTrainMatrix2=nn.Parameter(torch.randn(M,Tin*Tout).to(device),requires_grad=True).to(device) # M*(Tin*Tout)
         self.GcnDecoderCell=GcnEncoderCell(N=N,hops=hops,device=device,
                                            tradGcn=tradGcn,dropout=dropout,dmodel=dmodel,num_heads=num_heads,Tin=Tout,
                                            M=M)
@@ -129,13 +131,12 @@ class GcnDecoder(nn.Module):
         :return:
         """
         ty=ty.permute(0,2,1,3).contiguous() # batch*Tout*N*dmodel
-        x=x.permute(0,2,1,3).contiguous() # batch*Tin*N*dmodel
-        x=self.xTinToutCNN(x) # batch*Tout*N*dmodel
-        x=x.permute(0,2,1,3).contiguous() # batch*N*Tout*dmodel
+        x=x.permute(0,1,3,2).contiguous() # batch*N*dmodel*Tin
+        TinToutTrainMatrix = torch.reshape(torch.mm(self.TinToutTrainMatrix1,self.TinToutTrainMatrix2),(self.N,self.Tin,self.Tout)) # N*Tin*Tout
+        x = torch.einsum("bndi,nit->bndt",(x,TinToutTrainMatrix)) # batch*N*dmodel*Tout
+        x=x.permute(0,1,3,2).contiguous() # batch*N*Tout*dmodel
         x=self.GcnDecoderCell.forward(hidden=x,tXin=ty.permute(0,2,1,3).contiguous()) # batch*N*Tout*dmodel
-
-        predict = torch.mm(self.predictTrainMatrix1,self.predictTrainMatrix2) # N*d
-        x=torch.einsum("bntd,nd->bnt",(x,predict)) # batch*N*Tout
+        x=self.dmodelCNN(x.permute(0,3,1,2).contiguous()).squeeze(dim=1) # batch*N*Tout
 
         return x # batch*N*Tout
 
