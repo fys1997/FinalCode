@@ -38,9 +38,9 @@ def main():
     outputT = dataloader['outputT']
     model=mixNet(args=args,device=args.device,T=T,N=N,outputT=outputT)
     with open(args.save,'rb') as f:
-        model.load_state_dict(torch.load(f))
-        model.to(device)
+        model.load_state_dict(torch.load(f),strict=True)
         model.eval()
+        model.to(device)
         print("model load successfully")
 
     scaler=dataloader['scaler']
