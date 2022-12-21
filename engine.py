@@ -10,10 +10,11 @@ class trainer():
 
         # 加载模型，根据preTrain决定加载已经训练好的best model或是重新开始训练模型
         if args.preTrain is not None and args.preTrain:
-            with open(args.save, 'rb') as f:
-                self.model = torch.load(f)
-                self.model.to(device)
-                print("model load successfully")
+            model = mixNet(args=args, device=args.device, T=T, N=N, outputT=outputT)
+            model.to(device)
+            model.load_state_dict(torch.load(args.save), strict=True)
+            model.eval()
+            print("model load successfully")
         else:
             self.model = mixNet(args, device, T, N, outputT)
             self.model.to(device)
