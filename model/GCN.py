@@ -22,7 +22,7 @@ class GCN(nn.Module):
 
         # 设置GCN增强的矩阵分解的维度
         self.trainW1=nn.Parameter(torch.randn(N,M).to(device),requires_grad=True).to(device) # N*M
-        self.trainW2=nn.Parameter(torch.randn(M,dmodel*dmodel),requires_grad=True).to(device) # M*(dmodel*dmodel)
+        self.trainW2=nn.Parameter(torch.randn(M,dmodel*dmodel).to(device),requires_grad=True).to(device) # M*(dmodel*dmodel)
 
         # 运用传统图卷积
         self.tradGcn = tradGcn

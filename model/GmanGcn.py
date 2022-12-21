@@ -159,14 +159,14 @@ class TemMulHeadAtte(nn.Module):
         d_keys=2*dmodel//num_heads
         d_values=2*dmodel//num_heads
 
-        self.query_projection1=nn.Parameter(torch.randn(N*dmodel,M),requires_grad=True).to(device)
-        self.query_projection2=nn.Parameter(torch.randn(M,2*d_keys*num_heads),requires_grad=True).to(device)
+        self.query_projection1=nn.Parameter(torch.randn(N*dmodel,M).to(device),requires_grad=True).to(device)
+        self.query_projection2=nn.Parameter(torch.randn(M,2*d_keys*num_heads).to(device),requires_grad=True).to(device)
 
-        self.key_projection1=nn.Parameter(torch.randn(N*dmodel,M),requires_grad=True).to(device)
-        self.key_projection2=nn.Parameter(torch.randn(M,2*d_keys*num_heads),requires_grad=True).to(device)
+        self.key_projection1=nn.Parameter(torch.randn(N*dmodel,M).to(device),requires_grad=True).to(device)
+        self.key_projection2=nn.Parameter(torch.randn(M,2*d_keys*num_heads).to(device),requires_grad=True).to(device)
 
-        self.value_projection1=nn.Parameter(torch.randn(N*dmodel,M),requires_grad=True).to(device)
-        self.value_projection2=nn.Parameter(torch.randn(M,2*d_values*num_heads),requires_grad=True).to(device)
+        self.value_projection1=nn.Parameter(torch.randn(N*dmodel,M).to(device),requires_grad=True).to(device)
+        self.value_projection2=nn.Parameter(torch.randn(M,2*d_values*num_heads).to(device),requires_grad=True).to(device)
 
         # self.query_projection=nn.Linear(in_features=2*dmodel,out_features=d_keys*num_heads)
         # self.key_projection=nn.Linear(in_features=2*dmodel,out_features=d_keys*num_heads)
