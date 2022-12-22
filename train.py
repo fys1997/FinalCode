@@ -8,7 +8,7 @@ from engine import trainer
 parser=argparse.ArgumentParser()
 parser.add_argument('--M',type=int,default=10,help='GCN matrix W dimensions')
 parser.add_argument('--device',type=str,default='cuda:0',help='GPU cuda')
-parser.add_argument('--hops',type=int,default=4,help='GCN hops')
+parser.add_argument('--hops',type=int,default=5,help='GCN hops')
 parser.add_argument('--dropout',type=float,default=0.3,help='dropout')
 parser.add_argument('--head',type=int,default=8,help='the multihead count of attention')
 parser.add_argument('--lrate',type=float,default=0.001,help='learning rate')
