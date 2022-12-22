@@ -21,17 +21,15 @@ class GCN(nn.Module):
         self.trainMatrix2=nn.Parameter(torch.randn(M,N).to(device),requires_grad=True).to(device)
 
         # 设置GCN增强的矩阵分解的维度
-        self.trainW1=nn.Parameter(torch.randn(N,M).to(device),requires_grad=True).to(device) # N*M
-        self.trainW2=nn.Parameter(torch.randn(M,dmodel*dmodel).to(device),requires_grad=True).to(device) # M*(dmodel*dmodel)
+        self.trainW1List = nn.ModuleList()
+        self.trainW2List = nn.ModuleList()
+        for i in range(hops):
+            self.trainW1List.append(nn.Parameter(torch.randn(N,M).to(device),requires_grad=True).to(device))
+            self.trainW2List.append(nn.Parameter(torch.randn(M,dmodel*dmodel).to(device),requires_grad=True).to(device))
 
         # 运用传统图卷积
         self.tradGcn = tradGcn
-        if tradGcn:
-            self.tradGcnW = nn.ModuleList()
-            for i in range(self.hops):
-                self.tradGcnW.append(nn.Linear(self.T, self.T))
-        else:
-            self.gcnLinear = nn.Linear(dmodel * (self.hops + 1), dmodel)
+        self.gcnLinear = nn.Linear(dmodel * (self.hops + 1), dmodel)
 
     def forward(self,X,timeEmbedding):
         """
@@ -50,29 +48,21 @@ class GCN(nn.Module):
         H.append(X)
         Hbefore = X  # X batch*Tin*node*dmodel
         # 开始图卷积部分
-        if self.tradGcn == False:
+        for k in range(self.hops):
             # 开始生成对应的GCN矩阵增强W矩阵
-            W = torch.mm(self.trainW1, self.trainW2)  # N*(dmodel*dmodel)
-            W = torch.reshape(W, (self.N, self.dmodel, self.dmodel))  # N*dmodel*dmodel
-            for k in range(self.hops):
-                # 完成AX
-                Hnow=torch.einsum("nk,btkd->btnd", (A, Hbefore)) # batch*Tin*node*dmodel
-                # 完成XW
-                Hnow=Hnow.permute(0,2,1,3).contiguous() # bacth*N*Tin*dmodel
-                Hnow=torch.einsum("bntk,nkd->bntd",(Hnow,W)) # batch*N*Tin*dmodel
-                Hnow=Hnow.permute(0,2,1,3).contiguous() # batch*Tin*N*dmodel
-                Hnow=torch.sigmoid(X+Hnow)*torch.tanh(X+Hnow)
-                H.append(Hnow)
-                Hbefore = Hnow
-            H = torch.cat(H, dim=3)  # batch*Tin*N*(dmodel*(hops+1))
-            Hout = self.gcnLinear(H)  # batch*Tin*N*dmodel
-            Hout = self.dropout(Hout) # batch*Tin*N*dmodel
-            Hout = Hout.permute(0,3,2,1).contiguous() # batch*dmodel*N*Tin
-        else:
-            Hout = Hbefore
-            for k in range(self.hops):
-                Hout = torch.einsum("nk,bdkt->bdnt", (A, Hout))  # batch*N*T A*H
-                Hout = self.tradGcnW[k](Hout)  # batch*dmodel*N*T A*H*W
-                Hout = F.relu(Hout)  # relu(A*H*w)
-            Hout = self.dropout(Hout)  # batch*dmodel*N*T
+            W = torch.mm(self.trainW1List[k],self.trainW2List[k]) # N*(dmodel*dmodel)
+            W = torch.reshape(W, (self.N,self.dmodel,self.dmodel)) #N*dmodel*dmodel
+            # 完成AX
+            Hnow=torch.einsum("nk,btkd->btnd", (A, Hbefore)) # batch*Tin*node*dmodel
+            # 完成XW
+            Hnow=Hnow.permute(0,2,1,3).contiguous() # bacth*N*Tin*dmodel
+            Hnow=torch.einsum("bntk,nkd->bntd",(Hnow,W)) # batch*N*Tin*dmodel
+            Hnow=Hnow.permute(0,2,1,3).contiguous() # batch*Tin*N*dmodel
+            Hnow=torch.sigmoid(X+Hnow)*torch.tanh(X+Hnow)
+            H.append(Hnow)
+            Hbefore = Hnow
+        H = torch.cat(H, dim=3)  # batch*Tin*N*(dmodel*(hops+1))
+        Hout = self.gcnLinear(H)  # batch*Tin*N*dmodel
+        Hout = self.dropout(Hout) # batch*Tin*N*dmodel
+        Hout = Hout.permute(0,3,2,1).contiguous() # batch*dmodel*N*Tin
         return Hout
