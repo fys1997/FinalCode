@@ -23,7 +23,7 @@ parser.add_argument('--dmodel',type=int,default=64,help='transformerEncoder dmod
 parser.add_argument('--num_embedding',type=int,default=288,help='')
 parser.add_argument('--encoderBlocks',type=int,default=4,help=' encoder block numbers')
 parser.add_argument('--preTrain',type=bool,default=False,help='whether use preTrain model')
-parser.add_argument('--seed',type=int,default=1023,help='random seed')
+parser.add_argument('--seed',type=int,default=3407,help='random seed')
 
 
 args=parser.parse_args()

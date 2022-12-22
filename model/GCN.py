@@ -25,11 +25,17 @@ class GCN(nn.Module):
         self.trainW2List = list()
         for i in range(hops):
             self.trainW1List.append(nn.Parameter(torch.randn(N,M).to(device),requires_grad=True).to(device))
-            self.trainW2List.append(nn.Parameter(torch.randn(M,dmodel*dmodel).to(device),requires_grad=True).to(device))
+            self.trainW2List.append(nn.Parameter(torch.randn(M,Tin*Tin).to(device),requires_grad=True).to(device))
 
         # 运用传统图卷积
         self.tradGcn = tradGcn
-        self.gcnLinear = nn.Linear(dmodel * (self.hops + 1), dmodel)
+
+        if tradGcn:
+            self.tradGcnW = nn.ModuleList()
+            for i in range(self.hops):
+                self.tradGcnW.append(nn.Linear(self.T,self.T))
+        else:
+            self.gcnLinear = nn.Linear(Tin * (self.hops + 1), Tin)
 
     def forward(self,X,timeEmbedding):
         """
@@ -44,25 +50,29 @@ class GCN(nn.Module):
         A = F.softmax(A,dim=1) # N*N
 
         H = list()
-        X = X.permute(0,3,2,1).contiguous() # batch*Tin*node*dmodel
         H.append(X)
-        Hbefore = X  # X batch*Tin*node*dmodel
+        Hbefore = X  # X batch*dmodel*node*T
         # 开始图卷积部分
-        for k in range(self.hops):
-            # 开始生成对应的GCN矩阵增强W矩阵
-            W = torch.mm(self.trainW1List[k],self.trainW2List[k]) # N*(dmodel*dmodel)
-            W = torch.reshape(W, (self.N,self.dmodel,self.dmodel)) #N*dmodel*dmodel
-            # 完成AX
-            Hnow=torch.einsum("nk,btkd->btnd", (A, Hbefore)) # batch*Tin*node*dmodel
-            # 完成XW
-            Hnow=Hnow.permute(0,2,1,3).contiguous() # bacth*N*Tin*dmodel
-            Hnow=torch.einsum("bntk,nkd->bntd",(Hnow,W)) # batch*N*Tin*dmodel
-            Hnow=Hnow.permute(0,2,1,3).contiguous() # batch*Tin*N*dmodel
-            Hnow=torch.sigmoid(X+Hnow)*torch.tanh(X+Hnow)
-            H.append(Hnow)
-            Hbefore = Hnow
-        H = torch.cat(H, dim=3)  # batch*Tin*N*(dmodel*(hops+1))
-        Hout = self.gcnLinear(H)  # batch*Tin*N*dmodel
-        Hout = self.dropout(Hout) # batch*Tin*N*dmodel
-        Hout = Hout.permute(0,3,2,1).contiguous() # batch*dmodel*N*Tin
+        if self.tradGcn == False:
+            for k in range(self.hops):
+                # 开始生成对应的GCN矩阵增强W矩阵
+                W = torch.mm(self.trainW1List[k],self.trainW2List[k]) # N*(T*T)
+                W = torch.reshape(W, (self.N,self.T,self.T)) #N*T*T
+                # 完成AX
+                Hnow=torch.einsum("nk,bdkt->bdnt", (A, Hbefore)) # batch*dmodel*N*T
+                # 完成XW
+                Hnow=torch.einsum("bdni,nit->bdnt",(Hnow,W)) # batch*dmodel*N*T
+                Hnow=torch.sigmoid(X+Hnow)*torch.tanh(X+Hnow)
+                H.append(Hnow)
+                Hbefore = Hnow
+            H = torch.cat(H, dim=3)  # batch*dmodel*N*(T*(hops+1))
+            Hout = self.gcnLinear(H)  # batch*dmodel*N*T
+            Hout = self.dropout(Hout) # batch*dmodel*N*T
+        else:
+            Hout=Hbefore
+            for k in range(self.hops):
+                Hout = torch.einsum("nk,bdkt->bdnt", (A, Hout))  # batch*N*T A*H
+                Hout = self.tradGcnW[k](Hout)  # batch*dmodel*N*T A*H*W
+                Hout = F.relu(Hout)  # relu(A*H*w)
+            Hout = self.dropout(Hout)  # batch*dmodel*N*T
         return Hout

@@ -51,7 +51,7 @@ class GcnEncoderCell(nn.Module):
 
         query=torch.cat([hidden,tXin],dim=3) # batch*N*Tin*2dmodel
 
-        value=torch.cat([hidden,tXin],dim=3) # batch*N*Tin*dmodel
+        value=torch.cat([hidden,tXin],dim=3) # batch*N*Tin*2dmodel
 
         # 做attention
         atten_mask=GcnEncoderCell.generate_square_subsequent_mask(B=query.size(0),N=query.size(1),T=query.size(2)).to(self.device) # batch*N*1*Tq*Ts
@@ -131,10 +131,10 @@ class GcnDecoder(nn.Module):
         :return:
         """
         ty=ty.permute(0,2,1,3).contiguous() # batch*Tout*N*dmodel
-        x=x.permute(0,1,3,2).contiguous() # batch*N*dmodel*Tin
+        x=x.permute(0,3,1,2).contiguous() # batch*dmodel*N*Tin
         TinToutTrainMatrix = torch.reshape(torch.mm(self.TinToutTrainMatrix1,self.TinToutTrainMatrix2),(self.N,self.Tin,self.Tout)) # N*Tin*Tout
-        x = torch.einsum("bndi,nit->bndt",(x,TinToutTrainMatrix)) # batch*N*dmodel*Tout
-        x=x.permute(0,1,3,2).contiguous() # batch*N*Tout*dmodel
+        x = torch.einsum("bdni,nit->bdnt",(x,TinToutTrainMatrix)) # batch*dmodel*N*Tout
+        x=x.permute(0,2,3,1).contiguous() # batch*N*Tout*dmodel
         x=self.GcnDecoderCell.forward(hidden=x,tXin=ty.permute(0,2,1,3).contiguous()) # batch*N*Tout*dmodel
         x=self.dmodelCNN(x.permute(0,3,1,2).contiguous()).squeeze(dim=1) # batch*N*Tout
 
