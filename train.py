@@ -60,6 +60,8 @@ def main():
     else:
         best_valid_loss = 10000000
 
+    for param_tensor in engine.model.state_dict():
+        print(param_tensor,'\t',engine.model.state_dict()[param_tensor].size())
     # 开始训练
     for i in range(1,args.epochs+1):
         train_loss=[]
