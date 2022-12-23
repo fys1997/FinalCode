@@ -9,7 +9,7 @@ from model.model import mixNet
 parser=argparse.ArgumentParser()
 parser.add_argument('--M',type=int,default=10,help='GCN matrix W dimensions')
 parser.add_argument('--device',type=str,default='cuda:0',help='GPU cuda')
-parser.add_argument('--hops',type=int,default=4,help='GCN hops')
+parser.add_argument('--hops',type=int,default=5,help='GCN hops')
 parser.add_argument('--dropout',type=float,default=0.3,help='dropout')
 parser.add_argument('--head',type=int,default=8,help='the multihead count of attention')
 parser.add_argument('--lrate',type=float,default=0.001,help='learning rate')
@@ -24,7 +24,7 @@ parser.add_argument('--dmodel',type=int,default=64,help='transformerEncoder dmod
 parser.add_argument('--num_embedding',type=int,default=288,help='')
 parser.add_argument('--encoderBlocks',type=int,default=4,help=' encoder block numbers')
 parser.add_argument('--preTrain',type=bool,default=False,help='whether use preTrain model')
-parser.add_argument('--seed',type=int,default=1023,help='random seed')
+parser.add_argument('--seed',type=int,default=3407,help='random seed')
 args=parser.parse_args()
 
 
@@ -41,6 +41,8 @@ def main():
     model.load_state_dict(torch.load(args.save),strict=True)
     model.eval()
     print("model load successfully")
+    for param_tensor in model.state_dict():
+        print(param_tensor,'\t',model.state_dict()[param_tensor].size())
 
     scaler=dataloader['scaler']
 
