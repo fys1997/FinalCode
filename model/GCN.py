@@ -21,12 +21,8 @@ class GCN(nn.Module):
         self.trainMatrix2=nn.Parameter(torch.randn(M,N).to(device),requires_grad=True).to(device)
 
         # 设置GCN增强的矩阵分解的维度
-        self.trainW1List = list()
-        self.trainW2List = list()
-        for i in range(hops):
-            self.trainW1List.append(nn.Parameter(torch.randn(N,M).to(device),requires_grad=True).to(device))
-            self.trainW2List.append(nn.Parameter(torch.randn(M,Tin*Tin).to(device),requires_grad=True).to(device))
-
+        self.trainW1List = nn.ParameterList([nn.Parameter(torch.randn(N,M).to(device),requires_grad=True).to(device) for i in range(hops)]).to(device)
+        self.trainW2List = nn.ParameterList([nn.Parameter(torch.randn(M,Tin*Tin).to(device),requires_grad=True).to(device) for i in range(hops)]).to(device)
         # 运用传统图卷积
         self.tradGcn = tradGcn
 
