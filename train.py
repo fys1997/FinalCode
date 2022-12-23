@@ -106,7 +106,7 @@ def main():
         mvalid_mape=np.mean(valid_mape)
         mvalid_rmse=np.mean(valid_rmse)
         his_loss.append(mvalid_loss)
-        if mvalid_loss<best_valid_loss and torch.abs(mvalid_loss-mtrain_loss)<0.02:
+        if mvalid_loss<best_valid_loss:
             # 保存最佳模型
             torch.save(engine.model.state_dict(), args.save)
             print("best model saved")
