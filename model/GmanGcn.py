@@ -159,18 +159,18 @@ class TemMulHeadAtte(nn.Module):
         d_keys=2*dmodel//num_heads
         d_values=2*dmodel//num_heads
 
-        self.query_projection1=nn.Parameter(torch.randn(N*dmodel,M).to(device),requires_grad=True).to(device)
-        self.query_projection2=nn.Parameter(torch.randn(M,2*d_keys*num_heads).to(device),requires_grad=True).to(device)
+        # self.query_projection1=nn.Parameter(torch.randn(N*dmodel,M).to(device),requires_grad=True).to(device)
+        # self.query_projection2=nn.Parameter(torch.randn(M,2*d_keys*num_heads).to(device),requires_grad=True).to(device)
+        #
+        # self.key_projection1=nn.Parameter(torch.randn(N*dmodel,M).to(device),requires_grad=True).to(device)
+        # self.key_projection2=nn.Parameter(torch.randn(M,2*d_keys*num_heads).to(device),requires_grad=True).to(device)
+        #
+        # self.value_projection1=nn.Parameter(torch.randn(N*dmodel,M).to(device),requires_grad=True).to(device)
+        # self.value_projection2=nn.Parameter(torch.randn(M,2*d_values*num_heads).to(device),requires_grad=True).to(device)
 
-        self.key_projection1=nn.Parameter(torch.randn(N*dmodel,M).to(device),requires_grad=True).to(device)
-        self.key_projection2=nn.Parameter(torch.randn(M,2*d_keys*num_heads).to(device),requires_grad=True).to(device)
-
-        self.value_projection1=nn.Parameter(torch.randn(N*dmodel,M).to(device),requires_grad=True).to(device)
-        self.value_projection2=nn.Parameter(torch.randn(M,2*d_values*num_heads).to(device),requires_grad=True).to(device)
-
-        # self.query_projection=nn.Linear(in_features=2*dmodel,out_features=d_keys*num_heads)
-        # self.key_projection=nn.Linear(in_features=2*dmodel,out_features=d_keys*num_heads)
-        # self.value_projection=nn.Linear(in_features=2*dmodel,out_features=d_values*num_heads)
+        self.query_projection=nn.Linear(in_features=2*dmodel,out_features=d_keys*num_heads)
+        self.key_projection=nn.Linear(in_features=2*dmodel,out_features=d_keys*num_heads)
+        self.value_projection=nn.Linear(in_features=2*dmodel,out_features=d_values*num_heads)
         self.out_projection=nn.Linear(in_features=d_values*num_heads,out_features=dmodel)
 
     def forward(self,query,key,value,atten_mask):
@@ -185,20 +185,20 @@ class TemMulHeadAtte(nn.Module):
         B,N,T,E=query.shape
         H=self.num_heads
 
-        query_projection=torch.mm(self.query_projection1,self.query_projection2) # N*(dmodel*2*d_keys*num_heads)
-        query_projection=torch.reshape(query_projection,(self.N,2*self.dmodel,-1)) # N *(2dmodel)*(d_keys*num_heads)
-        key_projection=torch.mm(self.key_projection1,self.key_projection2) # N*(dmodel*2*d_keys*num_heads)
-        key_projection=torch.reshape(key_projection,(self.N,2*self.dmodel,-1)) # N*(2dmodel)*(d_keys*num_heads)
-        value_projection=torch.mm(self.value_projection1,self.value_projection2) # N*(dmodel*2*d_values*num_heads)
-        value_projection=torch.reshape(value_projection,(self.N,2*self.dmodel,-1)) # N*(2dmodel)*(d_values*num_heads)
+        # query_projection=torch.mm(self.query_projection1,self.query_projection2) # N*(dmodel*2*d_keys*num_heads)
+        # query_projection=torch.reshape(query_projection,(self.N,2*self.dmodel,-1)) # N *(2dmodel)*(d_keys*num_heads)
+        # key_projection=torch.mm(self.key_projection1,self.key_projection2) # N*(dmodel*2*d_keys*num_heads)
+        # key_projection=torch.reshape(key_projection,(self.N,2*self.dmodel,-1)) # N*(2dmodel)*(d_keys*num_heads)
+        # value_projection=torch.mm(self.value_projection1,self.value_projection2) # N*(dmodel*2*d_values*num_heads)
+        # value_projection=torch.reshape(value_projection,(self.N,2*self.dmodel,-1)) # N*(2dmodel)*(d_values*num_heads)
+        #
+        # query=F.relu(torch.einsum("bnti,nik->bntk",(query,query_projection)).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
+        # key=F.relu(torch.einsum("bnti,nik->bntk",(key,key_projection)).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
+        # value=F.relu(torch.einsum("bnti,nik->bntk",(value,value_projection)).view(B,N,T,H,-1)) # batch*N*T*heads*d_values
 
-        query=F.relu(torch.einsum("bnti,nik->bntk",(query,query_projection)).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
-        key=F.relu(torch.einsum("bnti,nik->bntk",(key,key_projection)).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
-        value=F.relu(torch.einsum("bnti,nik->bntk",(value,value_projection)).view(B,N,T,H,-1)) # batch*N*T*heads*d_values
-
-        # query=F.relu(self.query_projection(query).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
-        # key=F.relu(self.key_projection(key).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
-        # value=F.relu(self.value_projection(value).view(B,N,T,H,-1)) # batch*N*T*heads*d_values
+        query=F.relu(self.query_projection(query).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
+        key=F.relu(self.key_projection(key).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
+        value=F.relu(self.value_projection(value).view(B,N,T,H,-1)) # batch*N*T*heads*d_values
 
         scale=1./sqrt(query.size(4))
 
