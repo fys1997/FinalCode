@@ -16,7 +16,7 @@ class timeEmbedding(nn.Module):
         """
         x=x.long()
         x=self.embed(x) # batch*N*Tin*dmodel
-        x1=x[:,:,:,0:1] # batch*N*Tin*1
-        x2=torch.sin(x[:,:,:,1:]) # batch*N*Tin*(dmodel-1)
-        x=torch.cat((x1,x2),dim=3) # batch*N*Tin*dmodel
+        # x1=x[:,:,:,0:1] # batch*N*Tin*1
+        # x2=torch.sin(x[:,:,:,1:]) # batch*N*Tin*(dmodel-1)
+        # x=torch.cat((x1,x2),dim=3) # batch*N*Tin*dmodel
         return self.dropout(x)

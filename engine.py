@@ -42,8 +42,8 @@ class trainer():
 
         loss = self.loss(predict, real_val[:, :, :, 0], 0.0)
         loss.backward()
-        # if self.clip is not None:
-        #     torch.nn.utils.clip_grad_norm(self.model.parameters(),self.clip)
+        if self.clip is not None:
+            torch.nn.utils.clip_grad_norm(self.model.parameters(),self.clip)
         self.optimizer.step()
         mape = util.masked_mape(predict, real_val[:, :, :, 0], 0.0).item()
         rmse = util.masked_rmse(predict, real_val[:, :, :, 0], 0.0).item()
