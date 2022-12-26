@@ -22,6 +22,7 @@ class trainer():
         self.optimizer = optim.Adam(self.model.parameters(), lr=args.lrate, weight_decay=args.wdeacy)
         self.loss = util.masked_mae
         self.scaler = scaler
+        self.clip = 5
 
     def train(self, X, real_val):
         """
