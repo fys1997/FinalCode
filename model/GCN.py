@@ -5,7 +5,8 @@ import torch.nn.functional as F
 
 class GCN(nn.Module):
     def __init__(self,Tin,  device, hops,N,
-                dmodel, M, tradGcn=False, dropout=0.1):
+                dmodel, M, trainMatrix1,trainMatrix2,
+                 tradGcn=False, dropout=0.1,):
         super().__init__()
         self.T=Tin # 输入时间维度
         self.N=N # 邻接矩阵边数 N*N
@@ -17,8 +18,8 @@ class GCN(nn.Module):
         self.dropout = nn.Dropout(p=dropout)
 
         # 设置自适应邻接矩阵
-        self.trainMatrix1=nn.Parameter(torch.randn(N,M).to(device),requires_grad=True).to(device)
-        self.trainMatrix2=nn.Parameter(torch.randn(M,N).to(device),requires_grad=True).to(device)
+        self.trainMatrix1=trainMatrix1
+        self.trainMatrix2=trainMatrix2
 
         # 设置GCN增强的矩阵分解的维度 修改为nn.ParameterList
         self.trainW1List = nn.ParameterList([nn.Parameter(torch.randn(N,M).to(device),requires_grad=True).to(device) for i in range(hops)]).to(device)

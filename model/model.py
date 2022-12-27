@@ -21,6 +21,10 @@ class mixNet(nn.Module):
         # 节点数
         self.num_nodes = N
 
+        # 设置自适应邻接矩阵
+        self.trainMatrix1 = nn.Parameter(torch.randn(N, args.M).to(device), requires_grad=True).to(device)
+        self.trainMatrix2 = nn.Parameter(torch.randn(args.M, N).to(device), requires_grad=True).to(device)
+
         # hops的值
         self.hops = args.hops
 
@@ -28,7 +32,8 @@ class mixNet(nn.Module):
 
         self.GcnAtteNet=GG.GcnAtteNet(num_embedding=args.num_embedding, N=N, hops=args.hops, device=device, tradGcn=args.tradGcn,
                                       dropout=args.dropout, dmodel=args.dmodel, num_heads=args.head,
-                                      Tin=T, Tout=outputT, encoderBlocks=args.encoderBlocks,M=args.M)
+                                      Tin=T, Tout=outputT, encoderBlocks=args.encoderBlocks,M=args.M,trainMatrix1=self.trainMatrix1,
+                                      trainMatrix2=self.trainMatrix2)
 
     def forward(self, X, Y, teacher_forcing_ratio):
         """

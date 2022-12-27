@@ -8,7 +8,8 @@ import numpy as np
 
 
 class GcnEncoderCell(nn.Module):
-    def __init__(self,N,hops,device,tradGcn,dropout,dmodel,num_heads,Tin,M):
+    def __init__(self,N,hops,device,tradGcn,dropout,dmodel,num_heads,Tin,M,
+                 trainMatrix1,trainMatrix2):
         """
 
         :param num_embedding: 有多少组时间，此处288
@@ -31,7 +32,8 @@ class GcnEncoderCell(nn.Module):
         self.gate=nn.Linear(in_features=2*dmodel,out_features=dmodel)
         # 设置图卷积层捕获空间特征
         self.Gcn=GCN.GCN(Tin=Tin, N=N, device=device, tradGcn=tradGcn,
-                         dropout=dropout, hops=hops, dmodel=dmodel, M=M)
+                         dropout=dropout, hops=hops, dmodel=dmodel, M=M,
+                         trainMatrix1=trainMatrix1,trainMatrix2=trainMatrix2)
 
     def forward(self,hidden,tXin):
         """
@@ -76,13 +78,14 @@ class GcnEncoderCell(nn.Module):
 
 class GcnEncoder(nn.Module):
     def __init__(self,num_embedding,N,hops,device,tradGcn,
-                 dropout,dmodel,num_heads,Tin,encoderBlocks,M):
+                 dropout,dmodel,num_heads,Tin,encoderBlocks,M,
+                 trainMatrix1,trainMatrix2):
         super(GcnEncoder, self).__init__()
         self.encoderBlock=nn.ModuleList()
         for i in range(encoderBlocks):
             self.encoderBlock.append(GcnEncoderCell(N=N, hops=hops, device=device, tradGcn=tradGcn,
                                                     dropout=dropout, dmodel=dmodel, num_heads=num_heads, Tin=Tin,
-                                                    M=M))
+                                                    M=M,trainMatrix1=trainMatrix1,trainMatrix2=trainMatrix2))
         self.timeEmbed=TE.timeEmbedding(num_embedding=num_embedding,embedding_dim=dmodel,dropout=dropout)
         self.device=device
         self.encoderBlocks=encoderBlocks
@@ -111,7 +114,8 @@ class GcnEncoder(nn.Module):
 
 
 class GcnDecoder(nn.Module):
-    def __init__(self,N,dmodel,Tout,Tin,num_heads,dropout,device,hops,tradGcn,M):
+    def __init__(self,N,dmodel,Tout,Tin,num_heads,dropout,device,hops,tradGcn,M,
+                 trainMatrix1,trainMatrix2):
         super(GcnDecoder, self).__init__()
         self.N=N
         self.Tin=Tin
@@ -121,7 +125,7 @@ class GcnDecoder(nn.Module):
         self.TinToutTrainMatrix2=nn.Parameter(torch.randn(M,Tin*Tout).to(device),requires_grad=True).to(device) # M*(Tin*Tout)
         self.GcnDecoderCell=GcnEncoderCell(N=N,hops=hops,device=device,
                                            tradGcn=tradGcn,dropout=dropout,dmodel=dmodel,num_heads=num_heads,Tin=Tout,
-                                           M=M)
+                                           M=M,trainMatrix1=trainMatrix1,trainMatrix2=trainMatrix2)
 
     def forward(self,x,ty):
         """
@@ -218,13 +222,14 @@ class TemMulHeadAtte(nn.Module):
 
 class GcnAtteNet(nn.Module):
     def __init__(self,num_embedding,N,hops,device,tradGcn,
-                 dropout,dmodel,num_heads,Tin,Tout,encoderBlocks,M):
+                 dropout,dmodel,num_heads,Tin,Tout,encoderBlocks,M,
+                 trainMatrix1,trainMatrix2):
         super(GcnAtteNet, self).__init__()
         self.GcnEncoder=GcnEncoder(num_embedding=num_embedding,N=N,hops=hops,
                                    device=device,tradGcn=tradGcn,dropout=dropout,dmodel=dmodel,num_heads=num_heads,
-                                   Tin=Tin,encoderBlocks=encoderBlocks, M=M)
+                                   Tin=Tin,encoderBlocks=encoderBlocks, M=M,trainMatrix1=trainMatrix1,trainMatrix2=trainMatrix2)
         self.GcnDecoder=GcnDecoder(N=N,dmodel=dmodel,Tout=Tout,Tin=Tin,num_heads=num_heads,dropout=dropout,device=device,
-                                   hops=hops,tradGcn=tradGcn, M=M)
+                                   hops=hops,tradGcn=tradGcn, M=M,trainMatrix1=trainMatrix1,trainMatrix2=trainMatrix2)
 
     def forward(self,vx,tx,ty):
         output, ty = self.GcnEncoder(vx.unsqueeze(dim=3), tx, ty)  # batch*N*Tin*dmodel
