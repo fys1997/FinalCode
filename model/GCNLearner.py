@@ -13,7 +13,7 @@ class GCNMeta(nn.Module):
         self.T = T
         self.spatialEmbed = np.loadtxt(args.distance_file, skiprows=1)
         self.spatialEmbed = self.spatialEmbed[self.spatialEmbed[..., 0].argsort()]
-        self.spatialEmbed = torch.from_numpy(self.spatialEmbed[..., 1:]).float()  # 对应文件的space embed [N*64]
+        self.spatialEmbed = torch.from_numpy(self.spatialEmbed[..., 1:]).float().to(args.device)  # 对应文件的space embed [N*64]
 
         self.dmodel = args.dmodel
 
