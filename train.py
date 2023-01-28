@@ -65,6 +65,10 @@ def main():
 
     for param_tensor in engine.model.state_dict():
         print(param_tensor,'\t',engine.model.state_dict()[param_tensor].size())
+    # 查看parameter 大小
+    total_num = sum(p.numel() for p in engine.model.parameters())
+    trainable_num = sum(p.numel() for p in engine.model.parameters())
+    print('Total par num:{}, Trainable par num:{}'.format(total_num,trainable_num))
     # 开始训练
     for i in range(1,args.epochs+1):
         train_loss=[]
