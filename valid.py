@@ -25,12 +25,15 @@ parser.add_argument('--num_embedding',type=int,default=288,help='')
 parser.add_argument('--encoderBlocks',type=int,default=4,help=' encoder block numbers')
 parser.add_argument('--preTrain',type=bool,default=False,help='whether use preTrain model')
 parser.add_argument('--seed',type=int,default=1023,help='random seed')
+parser.add_argument('--location_file',type=str,default='data/graph_sensor_locations.csv',help='sensor location csv')
+parser.add_argument('--distance_file',type=str,default='data/sensor_graph/SE(METR).txt',help='distance adjacency matrix file')
+parser.add_argument('--clip',type=int,default=8,help='gradient norm clip')
 args=parser.parse_args()
 
 
 def main():
     dataloader = util.load_dataset(args.data, args.batch_size, args.batch_size, args.batch_size)
-    device=torch.device(args.device if torch.cuda.is_available() else "cpu")
+    args.device=torch.device(args.device if torch.cuda.is_available() else "cpu")
     print(args)
     # load the best saved model
     T = dataloader['T']
@@ -40,7 +43,7 @@ def main():
     with open(args.save,'rb') as f:
         model.load_state_dict(torch.load(f),strict=True)
         model.eval()
-        model.to(device)
+        model.to(args.device)
         print("model load successfully")
 
     scaler=dataloader['scaler']
@@ -49,8 +52,8 @@ def main():
     mape=[]
     rmse=[]
     for iter,(x,y) in enumerate(dataloader['val_loader'].get_iterator()):
-        testx=torch.Tensor(x).to(device) # batch*T*N*2
-        testy=torch.Tensor(y).to(device) #batch*T*N*2
+        testx=torch.Tensor(x).to(args.device) # batch*T*N*2
+        testy=torch.Tensor(y).to(args.device) #batch*T*N*2
         with torch.no_grad():
             preds=model(testx.permute(0,2,1,3).contiguous(),testy.permute(0,2,1,3).contiguous(),0).permute(0,2,1).contiguous()
         pred=scaler.inverse_transform(preds) #batch*T*N
@@ -62,11 +65,11 @@ def main():
     print(log.format(np.mean(mae),np.mean(mape),np.mean(rmse)),flush=True)
 
     outputs = []
-    realy = torch.Tensor(dataloader['y_val']).to(device) # batch_size*T*N*2
+    realy = torch.Tensor(dataloader['y_val']).to(args.device) # batch_size*T*N*2
 
     for iter, (x, y) in enumerate(dataloader['val_loader'].get_iterator()):
-        testx = torch.Tensor(x).to(device) # batch*T*N*2
-        testy=torch.Tensor(y).to(device) # batch*outputT*N*2
+        testx = torch.Tensor(x).to(args.device) # batch*T*N*2
+        testy=torch.Tensor(y).to(args.device) # batch*outputT*N*2
         with torch.no_grad():
             preds = model(testx.permute(0,2,1,3).contiguous(),testy.permute(0,2,1,3).contiguous(),0).permute(0,2,1).contiguous() # batch*T*N
         outputs.append(preds)
