@@ -162,11 +162,11 @@ class TemMulHeadAtte(nn.Module):
         B,N,T,E=query.shape
         H=self.num_heads
 
-        K,Q,V = self.AttentionMeta(tX) # batch*N*2dmodel*(d_keys*num_heads)
+        K,Q,V = self.AttentionMeta(tX) # batch*N*T*2dmodel*(d_keys*num_heads)
 
-        query = self.leakeyRelu(torch.einsum("bnti,bnik->bntk",(query,Q)).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
-        key = self.leakeyRelu(torch.einsum("bnti,bnik->bntk",(key,K)).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
-        value = self.leakeyRelu(torch.einsum("bnti,bnik->bntk",(value,V)).view(B,N,T,H,-1)) # batch*N*T*heads*d_values
+        query = self.leakeyRelu(torch.einsum("bnti,bntik->bntk",(query,Q)).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
+        key = self.leakeyRelu(torch.einsum("bnti,bntik->bntk",(key,K)).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
+        value = self.leakeyRelu(torch.einsum("bnti,bntik->bntk",(value,V)).view(B,N,T,H,-1)) # batch*N*T*heads*d_values
         # query=F.relu(self.query_projection(query).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
         # key=F.relu(self.key_projection(key).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
         # value=F.relu(self.value_projection(value).view(B,N,T,H,-1)) # batch*N*T*heads*d_values
