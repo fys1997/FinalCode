@@ -32,11 +32,10 @@ class GCN(nn.Module):
         """
 
         :param X: batch*dmodel*node*T
-        :param matrix: batch*T*N*N
+        :param matrix: N*N
         :return: Hout:[batch*dmodel*node*T]
         """
-        A = F.relu(matrix)  # batch*T*N*N
-        A = F.softmax(A, dim=3)  # batch*T*N*N
+
 
         H = list()
         H.append(X)
@@ -48,7 +47,7 @@ class GCN(nn.Module):
                 # W = torch.mm(self.trainW1List[k], self.trainW2List[k])  # N*(T*T)
                 # W = torch.reshape(W, (self.N, self.T, self.T))  # N*T*T
                 # 完成AX
-                Hnow = torch.einsum("btnk,bdkt->bdnt", (A, Hbefore))  # batch*dmodel*N*T
+                Hnow = torch.einsum("nk,bdkt->bdnt", (matrix, Hbefore))  # batch*dmodel*N*T
                 # 完成XW
                 # Hnow = torch.einsum("bdni,nit->bdnt", (Hnow, W))  # batch*dmodel*N*T
                 Hnow = torch.sigmoid(X + Hnow) * torch.tanh(X + Hnow)
@@ -60,7 +59,7 @@ class GCN(nn.Module):
         else:
             Hout = Hbefore
             for k in range(self.hops):
-                Hout = torch.einsum("nk,bdkt->bdnt", (A, Hout))  # batch*N*T A*H
+                Hout = torch.einsum("nk,bdkt->bdnt", (matrix, Hout))  # batch*N*T A*H
                 Hout = self.tradGcnW[k](Hout)  # batch*dmodel*N*T A*H*W
                 Hout = F.relu(Hout)  # relu(A*H*w)
             Hout = self.dropout(Hout)  # batch*dmodel*N*T

@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import pandas as pd
+import numpy as np
+
 
 
 class AttentionMeta(nn.Module):
@@ -21,44 +23,46 @@ class AttentionMeta(nn.Module):
         df = pd.read_csv(self.location_file, header=None, usecols=[2, 3])
         df = df.apply(pd.to_numeric, errors='coerce').fillna(0)
         self.locations = torch.from_numpy(df.values[1:]).to(self.device).to(torch.float32)  # N*2 (经纬度)
+        mean = self.locations.mean()
+        std = self.locations.std()
+        self.locations = (self.locations-mean)/std
+
+        self.spatialEmbed = np.loadtxt(args.distance_file, skiprows=1)
+        self.spatialEmbed = self.spatialEmbed[self.spatialEmbed[..., 0].argsort()]
+        self.spatialEmbed = torch.from_numpy(self.spatialEmbed[..., 1:]).float().to(args.device)  # 对应文件的space embed [N*64]
+        mean = self.spatialEmbed.mean()
+        std = self.spatialEmbed.std()
+        self.spatialEmbed = (self.spatialEmbed-mean)/std
+        self.spatialEmbedLinear = nn.Linear(in_features=64,out_features=self.dmodel)
 
         self.locationLinear = nn.Linear(in_features=2, out_features=self.dmodel)
-        self.KLinear1 = nn.Linear(in_features=T + N, out_features=N)
-        self.KLinear2 = nn.Linear(in_features=1, out_features=2*self.d_keys*self.num_heads*T)
-        self.QLinear1 = nn.Linear(in_features=T + N, out_features=N)
-        self.QLinear2 = nn.Linear(in_features=1, out_features=2 * self.d_keys * self.num_heads * T)
-        self.VLinear1 = nn.Linear(in_features=T + N, out_features=N)
-        self.VLinear2 = nn.Linear(in_features=1, out_features=2 * self.d_keys * self.num_heads * T)
+        self.KLinear = nn.Linear(in_features=1, out_features=self.d_keys*self.num_heads)
+        self.QLinear = nn.Linear(in_features=1, out_features=self.d_keys*self.num_heads)
+        self.VLinear = nn.Linear(in_features=1, out_features=self.d_keys*self.num_heads)
+        self.outLinear = nn.Linear(in_features=1, out_features=self.d_keys*self.num_heads//2)
 
     def forward(self, t):
         """
         tX: 时间嵌入向量 batch*T*dmodel
         return：
-        K (N*T*2dmodel*(dkeys*num_heads))
-        Q (N*T*2dmodel*(dkeys*num_heads))
-        V (N*T*2dmodel*(dkeys*num_heads))
-        out_pro 可能存在
+        K (N*2dmodel*(dkeys*num_heads))
+        Q (N*2dmodel*(dkeys*num_heads))
+        V (N*2dmodel*(dkeys*num_heads))
+        out_pro (N*(dkeys*num_heads)*dmodel)
         """
 
         locations = self.locationLinear(self.locations)  # N*dmodel
-        batch = t.shape[0]
-        locations = locations.unsqueeze(0)  # 1*N*dmodel
-        locations = locations.repeat(batch, 1, 1)  # batch*N*dmodel
-        metaInfo = torch.cat((t, locations), 1)  # batch*(T+N)*dmodel
-        metaInfo = metaInfo.permute(0, 2, 1).contiguous()  # batch*dmodel*(T+N)
+        spatialEmbed = self.spatialEmbedLinear(self.spatialEmbed) # N*dmodel
+        metaInfo = torch.cat((locations,spatialEmbed),0) # 2N*(dmodel)
+        metaInfo = torch.reshape(metaInfo,(2*self.N*self.dmodel,1)) # (2N*dmodel)*1
 
-        K = self.KLinear1(metaInfo)  # batch*dmodel*N
-        K = torch.reshape(K,(batch,self.dmodel*self.N,1)) # batch*(dmodel*N)*1
-        K = self.KLinear2(K) # batch*(dmodel*N)*(2*d_keys*num_heads*T)
-        K = torch.reshape(K,(batch,self.N,self.T,2*self.dmodel,-1)) # batch*N*T*2dmodel*(d_keys*num_heads)
+        K = self.KLinear(metaInfo) # (2N*dmodel)*(d_keys*num_heads)
+        K = torch.reshape(K,(self.N,2*self.dmodel,-1)) # N*2dmodel*(dKeys*num_heads)
+        Q = self.QLinear(metaInfo)
+        Q = torch.reshape(Q,(self.N,2*self.dmodel,-1))
+        V = self.VLinear(metaInfo)
+        V = torch.reshape(V,(self.N,2*self.dmodel,-1))
+        out = self.outLinear(metaInfo) # N*(dmodel*dkeys*num_heads)
+        out = torch.reshape(out,(self.N,self.d_keys*self.num_heads,-1)) # N*(dkeys*num_heads)*dmodel
 
-        Q = self.QLinear1(metaInfo)  # batch*dmodel*N
-        Q = torch.reshape(Q, (batch, self.dmodel * self.N, 1))  # batch*(dmodel*N)*1
-        Q = self.QLinear2(Q)  # batch*(dmodel*N)*(2*d_keys*num_heads*T)
-        Q = torch.reshape(Q, (batch, self.N, self.T, 2 * self.dmodel, -1))  # batch*N*T*2dmodel*(d_keys*num_heads)
-
-        V = self.VLinear1(metaInfo)  # batch*dmodel*N
-        V = torch.reshape(V, (batch, self.dmodel * self.N, 1))  # batch*(dmodel*N)*1
-        V = self.VLinear2(V)  # batch*(dmodel*N)*(2*d_keys*num_heads*T)
-        V = torch.reshape(V, (batch, self.N, self.T, 2 * self.dmodel, -1))  # batch*N*T*2dmodel*(d_keys*num_heads)
-        return K, Q, V
+        return K, Q, V, out
