@@ -13,7 +13,6 @@ class trainer():
             self.model = mixNet(args=args, device=args.device, T=T, N=N, outputT=outputT)
             self.model.to(device)
             self.model.load_state_dict(torch.load(args.save), strict=True)
-            self.model.eval()
             print("model load successfully")
         else:
             self.model = mixNet(args, device, T, N, outputT)
