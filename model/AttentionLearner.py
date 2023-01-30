@@ -64,13 +64,13 @@ class AttentionMeta(nn.Module):
         metaInfo = torch.cat((locations, spatialEmbed), 0)  # 2N*(dmodel)
         metaInfo = torch.reshape(metaInfo, (2 * self.N * self.dmodel, 1))  # (2N*dmodel)*1
 
-        K = self.KLinear(metaInfo)  # (2N*dmodel)*(d_keys*num_heads)
+        K = torch.tanh(self.KLinear(metaInfo)) # (2N*dmodel)*(d_keys*num_heads)
         K = torch.reshape(K, (self.N, 2 * self.dmodel, -1))  # N*2dmodel*(dKeys*num_heads)
-        Q = self.QLinear(metaInfo)
+        Q = torch.tanh(self.QLinear(metaInfo))
         Q = torch.reshape(Q, (self.N, 2 * self.dmodel, -1))
         V = self.VLinear(metaInfo)
         V = torch.reshape(V, (self.N, 2 * self.dmodel, -1))
-        out = self.outLinear(metaInfo)  # N*(dmodel*dkeys*num_heads)
+        out = torch.tanh(self.outLinear(metaInfo))  # N*(dmodel*dkeys*num_heads)
         out = torch.reshape(out, (self.N, self.d_keys * self.num_heads, -1))  # N*(dkeys*num_heads)*dmodel
 
         return K, Q, V, out

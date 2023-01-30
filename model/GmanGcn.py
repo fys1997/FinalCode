@@ -152,6 +152,11 @@ class TemMulHeadAtte(nn.Module):
 
         self.AttentionMeta = AttentionMeta(args=args,N=N,T=T)
 
+        self.batchNormQ = nn.BatchNorm2d(num_features=d_keys*self.num_heads)
+        self.batchNormK = nn.BatchNorm2d(num_features=d_keys*self.num_heads)
+        self.batchNormV = nn.BatchNorm2d(num_features=d_keys*self.num_heads)
+        self.batchNormOut = nn.BatchNorm2d(num_features=self.dmodel)
+
         # self.query_projection=nn.Linear(in_features=2*self.dmodel,out_features=d_keys*self.num_heads)
         # self.key_projection=nn.Linear(in_features=2*self.dmodel,out_features=d_keys*self.num_heads)
         # self.value_projection=nn.Linear(in_features=2*self.dmodel,out_features=d_values*self.num_heads)
@@ -172,9 +177,12 @@ class TemMulHeadAtte(nn.Module):
 
         K,Q,V,out = self.AttentionMeta(tX) # (N*2dmodel*(dkeys*num_heads)), (N*(dkeys*num_heads)*dmodel)
 
-        query = F.relu(torch.einsum("bnti,nik->bntk",(query,Q)).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
-        key = F.relu(torch.einsum("bnti,nik->bntk",(key,K)).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
-        value = F.relu(torch.einsum("bnti,nik->bntk",(value,V)).view(B,N,T,H,-1)) # batch*N*T*heads*d_values
+        query = self.batchNormQ(torch.einsum("bnti,nik->bntk",(query,Q)).permute(0,3,1,2).contiguous()) # batch*(dkeys*num_heads)*N*T
+        query = torch.sigmoid(query.permute(0,2,3,1).contiguous().view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
+        key = self.batchNormK(torch.einsum("bnti,nik->bntk",(key,K)).permute(0,3,1,2).contiguous()) # batch*(dkeys*num_heads)*N*T
+        key = torch.sigmoid(key.permute(0,2,3,1).contiguous().view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
+        value = self.batchNormV(torch.einsum("bnti,nik->bntk",(value,V)).permute(0,3,1,2).contiguous()) # batch*(dkeys*num_heads)*N*T
+        value = torch.sigmoid(value.permute(0,2,3,1).contiguous().view(B,N,T,H,-1)) # batch*N*T*heads*d_values
         # query=F.relu(self.query_projection(query).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
         # key=F.relu(self.key_projection(key).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
         # value=F.relu(self.value_projection(value).view(B,N,T,H,-1)) # batch*N*T*heads*d_values
@@ -189,7 +197,8 @@ class TemMulHeadAtte(nn.Module):
         value=torch.einsum("bnhts,bnshd->bnthd",(scores,value)) # batch*N*T*heads*d_values
         value=value.contiguous()
         value=value.view(B,N,T,-1) # batch*N*T*(heads*d_values)
-        value = torch.sigmoid(torch.einsum("bnti,nik->bntk",(value,out))) # batch*N*T*dmodel
+        value = self.batchNormOut(torch.einsum("bnti,nik->bntk",(value,out)).permute(0,3,1,2).contiguous()) # batch*dmodel*N*T
+        value = torch.sigmoid(value.permute(0,2,3,1).contiguous()) # batch*N*T*dmodel
 
         # 返回最后的向量和得到的attention分数
         return value,scores
