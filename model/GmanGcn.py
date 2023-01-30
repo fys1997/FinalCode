@@ -9,11 +9,11 @@ from model.AttentionLearner import AttentionMeta
 from model.GCNLearner import GCNMeta
 
 
-class GcnEncoderCell(nn.Module):
+class GcnAttentionCell(nn.Module):
     def __init__(self, N, Tin, args):
         """
         """
-        super(GcnEncoderCell, self).__init__()
+        super(GcnAttentionCell, self).__init__()
         self.temporalAttention=TemMulHeadAtte(N=N, args=args,T=Tin)
 
         self.device=args.device
@@ -36,14 +36,14 @@ class GcnEncoderCell(nn.Module):
 
         # 捕获时间依赖
 
-        key=torch.cat([hidden,tXin],dim=3) # batch*N*Tin*2dmodel
+        key=hidden # batch*N*Tin*dmodel
 
-        query=torch.cat([hidden,tXin],dim=3) # batch*N*Tin*2dmodel
+        query=hidden # batch*N*Tin*dmodel
 
-        value=torch.cat([hidden,tXin],dim=3) # batch*N*Tin*2dmodel
+        value=hidden # batch*N*Tin*dmodel
 
         # 做attention
-        atten_mask=GcnEncoderCell.generate_square_subsequent_mask(B=query.size(0),N=query.size(1),T=query.size(2)).to(self.device) # batch*N*1*Tq*Ts
+        atten_mask=GcnAttentionCell.generate_square_subsequent_mask(B=query.size(0), N=query.size(1), T=query.size(2)).to(self.device) # batch*N*1*Tq*Ts
         value,atten=self.temporalAttention.forward(query=query,key=key,value=value,atten_mask=atten_mask,tX=tXin[:,0,:,:]) # batch*N*T*dmodel
 
         # 做gate
@@ -69,7 +69,7 @@ class GcnEncoder(nn.Module):
         self.encoderBlock=nn.ModuleList()
         self.GCNMeta = GCNMeta(args=args,N=N,T=Tin)
         for i in range(args.encoderBlocks):
-            self.encoderBlock.append(GcnEncoderCell(N=N,Tin=Tin, args=args))
+            self.encoderBlock.append(GcnAttentionCell(N=N, Tin=Tin, args=args))
 
         self.device=args.device
         self.encoderBlocks=args.encoderBlocks
@@ -102,10 +102,14 @@ class GcnDecoder(nn.Module):
         self.N=N
         self.Tin=Tin
         self.Tout=Tout
-        self.dmodelCNN=nn.Conv2d(in_channels=args.dmodel,out_channels=1,kernel_size=(1,1))
-        self.TinToutTrainMatrix1=nn.Parameter(torch.randn(N,args.M).to(args.device),requires_grad=True).to(args.device) # N*M
-        self.TinToutTrainMatrix2=nn.Parameter(torch.randn(args.M,Tin*Tout).to(args.device),requires_grad=True).to(args.device) # M*(Tin*Tout)
-        self.GcnDecoderCell=GcnEncoderCell(N=N,Tin=Tin, args=args)
+        self.xTinToutCNN = nn.Conv2d(in_channels=Tin,out_channels=Tout,kernel_size=(1,1))
+        self.predictLinear = nn.Linear(in_features=args.dmodel,out_features=1)
+
+        self.decoderBlock = nn.ModuleList()
+        self.decoderBlocks = args.decoderBlocks
+        for i in range(args.decoderBlocks):
+            self.decoderBlock.append(GcnAttentionCell(N=N, Tin=Tin, args=args))
+
         self.GCNMeta = GCNMeta(args=args,N=N,T=Tout)
 
     def forward(self,x,ty):
@@ -115,13 +119,18 @@ class GcnDecoder(nn.Module):
         :param ty: batch*N*Tout*dmodel
         :return:
         """
-        x=x.permute(0,3,1,2).contiguous() # batch*dmodel*N*Tin
-        TinToutTrainMatrix = torch.reshape(torch.mm(self.TinToutTrainMatrix1,self.TinToutTrainMatrix2),(self.N,self.Tin,self.Tout)) # N*Tin*Tout
-        x = torch.einsum("bdni,nit->bdnt",(x,TinToutTrainMatrix)) # batch*dmodel*N*Tout
-        x=x.permute(0,2,3,1).contiguous() # batch*N*Tout*dmodel
+        x=x.permute(0,2,1,3).contiguous() # batch*Tin*N*dmodel
+        x = self.xTinToutCNN(x) # batch*Tout*N*dmodel
+        x=x.permute(0,2,1,3).contiguous() # batch*N*Tout*dmodel
+
+        hidden = x
+        skip = 0
         matrix = self.GCNMeta(t=ty[:,0,:,:]) # batch*Tout*N*N
-        x=self.GcnDecoderCell.forward(hidden=x,tXin=ty,matrix=matrix) # batch*N*Tout*dmodel
-        x=self.dmodelCNN(x.permute(0,3,1,2).contiguous()).squeeze(dim=1) # batch*N*Tout
+
+        for i in range(self.decoderBlocks):
+            hidden = self.decoderBlock[i].forward(hidden=hidden, tXin=ty, matrix=matrix)
+            skip = skip+hidden
+        x = self.predictLinear(x+skip).squeeze(dim=3) # batch*N*Tout
 
         return x # batch*N*Tout
 
@@ -142,7 +151,10 @@ class TemMulHeadAtte(nn.Module):
         d_values=2*self.dmodel//self.num_heads
 
         self.AttentionMeta = AttentionMeta(args=args,N=N,T=T)
-        self.leakeyRelu = nn.LeakyReLU(0.1)
+
+        self.batchNormQ = nn.BatchNorm2d(num_features=d_keys*self.num_heads)
+        self.batchNormK = nn.BatchNorm2d(num_features=d_keys*self.num_heads)
+        self.batchNormV = nn.BatchNorm2d(num_features=d_keys*self.num_heads)
 
         # self.query_projection=nn.Linear(in_features=2*self.dmodel,out_features=d_keys*self.num_heads)
         # self.key_projection=nn.Linear(in_features=2*self.dmodel,out_features=d_keys*self.num_heads)
@@ -162,11 +174,14 @@ class TemMulHeadAtte(nn.Module):
         B,N,T,E=query.shape
         H=self.num_heads
 
-        K,Q,V = self.AttentionMeta(tX) # batch*N*T*2dmodel*(d_keys*num_heads)
+        K,Q,V = self.AttentionMeta(tX) # batch*N*T*dmodel*(d_keys*num_heads)
 
-        query = self.leakeyRelu(torch.einsum("bnti,bntik->bntk",(query,Q)).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
-        key = self.leakeyRelu(torch.einsum("bnti,bntik->bntk",(key,K)).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
-        value = self.leakeyRelu(torch.einsum("bnti,bntik->bntk",(value,V)).view(B,N,T,H,-1)) # batch*N*T*heads*d_values
+        query = self.batchNormQ(torch.einsum("bnti,bntik->bntk",(query,Q)).permute(0,3,1,2).contiguous()) # batch*(dkeys*heads)*N*T
+        query = torch.sigmoid(query.permute(0,2,3,1).contiguous().view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
+        key = self.batchNormK(torch.einsum("bnti,bntik->bntk",(key,K)).permute(0,3,1,2).contiguous())
+        key = torch.sigmoid(key.permute(0,2,3,1).contiguous().view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
+        value = self.batchNormV(torch.einsum("bnti,bntik->bntk",(value,V)).permute(0,3,1,2).contiguous()) # batch*(dkeys*heads)*N*T
+        value = torch.sigmoid(value.permute(0,2,3,1).contiguous().view(B,N,T,H,-1)) # batch*N*T*heads*d_values
         # query=F.relu(self.query_projection(query).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
         # key=F.relu(self.key_projection(key).view(B,N,T,H,-1)) # batch*N*T*heads*d_keys
         # value=F.relu(self.value_projection(value).view(B,N,T,H,-1)) # batch*N*T*heads*d_values
@@ -179,9 +194,9 @@ class TemMulHeadAtte(nn.Module):
         scores=self.dropout(torch.softmax(scale*scores,dim=-1))
 
         value=torch.einsum("bnhts,bnshd->bnthd",(scores,value)) # batch*N*T*heads*d_values
-        value=value.contiguous()
-        value=value.view(B,N,T,-1) # batch*N*T*dmodel
-        value=self.leakeyRelu(self.out_projection(value))
+        value = value.contiguous()
+        value=value.view(B,N,T,-1) # batch*N*T*(heads*dvalues)
+        value=F.relu(self.out_projection(value))
 
         # 返回最后的向量和得到的attention分数
         return value,scores
