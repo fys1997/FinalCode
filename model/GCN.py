@@ -21,9 +21,6 @@ class GCN(nn.Module):
         # 运用传统图卷积
         self.tradGcn = args.tradGcn
 
-        self.batchNormSigmoid = nn.BatchNorm2d(num_features=self.dmodel)
-        self.batchNormTanh = nn.BatchNorm2d(num_features=self.dmodel)
-
         if self.tradGcn:
             self.tradGcnW = nn.ModuleList()
             for i in range(self.hops):
@@ -54,7 +51,7 @@ class GCN(nn.Module):
                 Hnow = torch.einsum("btnk,bdkt->bdnt", (A, Hbefore))  # batch*dmodel*N*T
                 # 完成XW
                 # Hnow = torch.einsum("bdni,nit->bdnt", (Hnow, W))  # batch*dmodel*N*T
-                Hnow = torch.sigmoid(self.batchNormSigmoid(X + Hnow)) * torch.tanh(self.batchNormTanh(X + Hnow))
+                Hnow = torch.sigmoid(X + Hnow) * torch.tanh(X + Hnow)
                 H.append(Hnow)
                 Hbefore = Hnow
             H = torch.cat(H, dim=3)  # batch*dmodel*N*(T*(hops+1))

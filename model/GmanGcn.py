@@ -96,7 +96,7 @@ class GcnEncoder(nn.Module):
             hidden=self.encoderBlock[i].forward(hidden=hidden,tXin=tx, matrix=matrix)
             skip = skip + hidden
 
-        return skip
+        return skip+x
 
 
 class GcnDecoder(nn.Module):
@@ -133,7 +133,7 @@ class GcnDecoder(nn.Module):
         for i in range(self.decoderBlocks):
             hidden = self.decoderBlock[i].forward(hidden=hidden, tXin=ty, matrix=matrix)
             skip = skip+hidden
-        x = self.predictLinear(skip).squeeze(dim=3) # batch*N*Tout
+        x = self.predictLinear(skip+x).squeeze(dim=3) # batch*N*Tout
 
         return x # batch*N*Tout
 
