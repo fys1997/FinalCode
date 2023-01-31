@@ -41,6 +41,10 @@ class AttentionMeta(nn.Module):
         self.VLinear1 = nn.Linear(in_features=T + N, out_features=N)
         self.VLinear2 = nn.Linear(in_features=1, out_features= self.d_keys * self.num_heads * T)
 
+        self.batchNormK = nn.BatchNorm1d(num_features=N*self.dmodel)
+        self.batchNormQ = nn.BatchNorm1d(num_features=N*self.dmodel)
+        self.batchNormV = nn.BatchNorm1d(num_features=N*self.dmodel)
+
     def forward(self, t):
         """
         tX: 时间嵌入向量 batch*T*dmodel
@@ -60,16 +64,16 @@ class AttentionMeta(nn.Module):
 
         K = self.KLinear1(metaInfo)  # batch*dmodel*N
         K = torch.reshape(K,(batch,self.dmodel*self.N,1)) # batch*(dmodel*N)*1
-        K = self.KLinear2(K) # batch*(dmodel*N)*(d_keys*num_heads*T)
+        K = torch.tanh(self.batchNormK(self.KLinear2(K))) # batch*(dmodel*N)*(d_keys*num_heads*T)
         K = torch.reshape(K,(batch,self.N,self.T,self.dmodel,-1)) # batch*N*T*dmodel*(d_keys*num_heads)
 
         Q = self.QLinear1(metaInfo)  # batch*dmodel*N
         Q = torch.reshape(Q, (batch, self.dmodel * self.N, 1))  # batch*(dmodel*N)*1
-        Q = self.QLinear2(Q)  # batch*(dmodel*N)*(d_keys*num_heads*T)
+        Q = torch.tanh(self.batchNormQ(self.QLinear2(Q)))  # batch*(dmodel*N)*(d_keys*num_heads*T)
         Q = torch.reshape(Q, (batch, self.N, self.T, self.dmodel, -1))  # batch*N*T*dmodel*(d_keys*num_heads)
 
         V = self.VLinear1(metaInfo)  # batch*dmodel*N
         V = torch.reshape(V, (batch, self.dmodel * self.N, 1))  # batch*(dmodel*N)*1
-        V = self.VLinear2(V)  # batch*(dmodel*N)*(d_keys*num_heads*T)
+        V = torch.tanh(self.batchNormV(self.VLinear2(V)))  # batch*(dmodel*N)*(d_keys*num_heads*T)
         V = torch.reshape(V, (batch, self.N, self.T, self.dmodel, -1))  # batch*N*T*dmodel*(d_keys*num_heads)
         return K, Q, V
