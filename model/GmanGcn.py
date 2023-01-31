@@ -22,6 +22,8 @@ class GcnAttentionCell(nn.Module):
         # 设置图卷积层捕获空间特征
         self.Gcn=GCN.GCN(Tin=Tin, N=N, args=args)
 
+        self.batchNormGate = nn.BatchNorm2d(num_features=args.dmodel)
+
     def forward(self,hidden,tXin,matrix):
         """
 
@@ -50,6 +52,7 @@ class GcnAttentionCell(nn.Module):
         gateInput=torch.cat([gcnOutput,value],dim=3) # batch*N*Tin*2dmodel
         gateInput=self.gate(gateInput) # batch*N*Tin*dmodel
         gateInput=gateInput.permute(0,3,1,2).contiguous() # batch*dmodel*N*Tin
+        gateInput = self.batchNormGate(gateInput) # batch*dmodel*N*Tin
         z=torch.sigmoid(gateInput.permute(0,2,3,1).contiguous()) # batch*N*Tin*dmodel
         finalHidden=z*gcnOutput+(1-z)*value # batch*N*Tin*dmodel
 
@@ -93,7 +96,7 @@ class GcnEncoder(nn.Module):
             hidden=self.encoderBlock[i].forward(hidden=hidden,tXin=tx, matrix=matrix)
             skip = skip + hidden
 
-        return skip+x
+        return skip
 
 
 class GcnDecoder(nn.Module):
@@ -130,7 +133,7 @@ class GcnDecoder(nn.Module):
         for i in range(self.decoderBlocks):
             hidden = self.decoderBlock[i].forward(hidden=hidden, tXin=ty, matrix=matrix)
             skip = skip+hidden
-        x = self.predictLinear(x+skip).squeeze(dim=3) # batch*N*Tout
+        x = self.predictLinear(skip).squeeze(dim=3) # batch*N*Tout
 
         return x # batch*N*Tout
 

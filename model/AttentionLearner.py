@@ -60,16 +60,16 @@ class AttentionMeta(nn.Module):
 
         K = self.KLinear1(metaInfo)  # batch*dmodel*N
         K = torch.reshape(K,(batch,self.dmodel*self.N,1)) # batch*(dmodel*N)*1
-        K = torch.tanh(self.KLinear2(K)) # batch*(dmodel*N)*(d_keys*num_heads*T)
+        K = self.KLinear2(K) # batch*(dmodel*N)*(d_keys*num_heads*T)
         K = torch.reshape(K,(batch,self.N,self.T,self.dmodel,-1)) # batch*N*T*dmodel*(d_keys*num_heads)
 
         Q = self.QLinear1(metaInfo)  # batch*dmodel*N
         Q = torch.reshape(Q, (batch, self.dmodel * self.N, 1))  # batch*(dmodel*N)*1
-        Q = torch.tanh(self.QLinear2(Q))  # batch*(dmodel*N)*(d_keys*num_heads*T)
+        Q = self.QLinear2(Q)  # batch*(dmodel*N)*(d_keys*num_heads*T)
         Q = torch.reshape(Q, (batch, self.N, self.T, self.dmodel, -1))  # batch*N*T*dmodel*(d_keys*num_heads)
 
         V = self.VLinear1(metaInfo)  # batch*dmodel*N
         V = torch.reshape(V, (batch, self.dmodel * self.N, 1))  # batch*(dmodel*N)*1
-        V = torch.tanh(self.VLinear2(V))  # batch*(dmodel*N)*(d_keys*num_heads*T)
+        V = self.VLinear2(V)  # batch*(dmodel*N)*(d_keys*num_heads*T)
         V = torch.reshape(V, (batch, self.N, self.T, self.dmodel, -1))  # batch*N*T*dmodel*(d_keys*num_heads)
         return K, Q, V
