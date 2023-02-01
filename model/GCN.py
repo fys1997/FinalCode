@@ -36,7 +36,6 @@ class GCN(nn.Module):
         :return: Hout:[batch*dmodel*node*T]
         """
 
-
         H = list()
         H.append(X)
         Hbefore = X  # X batch*dmodel*node*T
