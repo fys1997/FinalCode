@@ -49,6 +49,8 @@ class AttentionMeta(nn.Module):
         self.VLinear = nn.Linear(in_features=1, out_features=self.d_keys * self.num_heads)
         self.outLinear = nn.Linear(in_features=1, out_features=self.d_keys * self.num_heads // 2)
 
+        self.dropout = nn.Dropout(p=args.dropout)
+
     def forward(self, t):
         """
         tX: 时间嵌入向量 batch*T*dmodel
@@ -59,18 +61,18 @@ class AttentionMeta(nn.Module):
         out_pro (N*(dkeys*num_heads)*dmodel)
         """
 
-        locations = self.locationLinear(self.locations)  # N*dmodel
-        spatialEmbed = self.spatialEmbedLinear(self.spatialEmbed)  # N*dmodel
+        locations = self.dropout(self.locationLinear(self.locations))  # N*dmodel
+        spatialEmbed = self.dropout(self.spatialEmbedLinear(self.spatialEmbed))  # N*dmodel
         metaInfo = torch.cat((locations, spatialEmbed), 0)  # 2N*(dmodel)
         metaInfo = torch.reshape(metaInfo, (2 * self.N * self.dmodel, 1))  # (2N*dmodel)*1
 
         K = torch.tanh(self.KLinear(metaInfo)) # (2N*dmodel)*(d_keys*num_heads)
         K = torch.reshape(K, (self.N, 2 * self.dmodel, -1))  # N*2dmodel*(dKeys*num_heads)
-        Q = torch.tanh(self.QLinear(metaInfo))
+        Q = torch.tanh(self.dropout(self.QLinear(metaInfo)))
         Q = torch.reshape(Q, (self.N, 2 * self.dmodel, -1))
-        V = self.VLinear(metaInfo)
+        V = torch.tanh(self.dropout(self.VLinear(metaInfo)))
         V = torch.reshape(V, (self.N, 2 * self.dmodel, -1))
-        out = torch.tanh(self.outLinear(metaInfo))  # N*(dmodel*dkeys*num_heads)
+        out = torch.tanh(self.dropout(self.outLinear(metaInfo)))  # N*(dmodel*dkeys*num_heads)
         out = torch.reshape(out, (self.N, self.d_keys * self.num_heads, -1))  # N*(dkeys*num_heads)*dmodel
 
         return K, Q, V, out

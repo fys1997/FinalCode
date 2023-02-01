@@ -21,6 +21,8 @@ class GcnAttentionCell(nn.Module):
         self.gate=nn.Linear(in_features=2*args.dmodel,out_features=args.dmodel)
         # 设置图卷积层捕获空间特征
         self.Gcn=GCN.GCN(Tin=Tin, N=N, args=args)
+        self.dropout = nn.Dropout(p=args.dropout)
+        self.batchNormGate = nn.BatchNorm2d(num_features=args.dmodel)
 
     def forward(self,hidden,tXin,matrix):
         """
@@ -48,8 +50,8 @@ class GcnAttentionCell(nn.Module):
 
         # 做gate
         gateInput=torch.cat([gcnOutput,value],dim=3) # batch*N*Tin*2dmodel
-        gateInput=self.gate(gateInput) # batch*N*Tin*dmodel
-        gateInput=gateInput.permute(0,3,1,2).contiguous() # batch*dmodel*N*Tin
+        gateInput=self.dropout(self.gate(gateInput)) # batch*N*Tin*dmodel
+        gateInput=self.batchNormGate(gateInput.permute(0,3,1,2).contiguous()) # batch*dmodel*N*Tin
         z=torch.sigmoid(gateInput.permute(0,2,3,1).contiguous()) # batch*N*Tin*dmodel
         finalHidden=z*gcnOutput+(1-z)*value # batch*N*Tin*dmodel
 
@@ -111,6 +113,7 @@ class GcnDecoder(nn.Module):
             self.decoderBlock.append(GcnAttentionCell(N=N, Tin=Tout, args=args))
 
         self.GCNMeta = GCNMeta(args=args,N=N,T=Tout)
+        self.dropout = nn.Dropout(p=args.dropout)
 
     def forward(self,x,ty):
         """
@@ -130,7 +133,7 @@ class GcnDecoder(nn.Module):
         for i in range(self.decoderBlocks):
             hidden = self.decoderBlock[i].forward(hidden=hidden, tXin = ty, matrix=matrix)
             skip = skip+hidden
-        x=self.predictLinear(x+skip).squeeze(dim=3) # batch*N*Tout
+        x=self.dropout(self.predictLinear(x+skip).squeeze(dim=3)) # batch*N*Tout
 
         return x # batch*N*Tout
 

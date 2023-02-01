@@ -22,13 +22,15 @@ class GCNMeta(nn.Module):
         self.trainMatrix1 = nn.Parameter(torch.randn(N,args.M).to(args.device),requires_grad=True).to(args.device)
         self.trainMatrix2 = nn.Parameter(torch.randn(args.M,N).to(args.device), requires_grad=True).to(args.device)
 
+        self.dropout = nn.Dropout(p=args.dropout)
+
     def forward(self, t):
         """
         t: batch*T*dmodel
 
         return: matrix :根据时间、距离学习的邻接矩阵，batch*T*N*N
         """
-        matrix = self.spatialEmbedLinear(self.spatialEmbed) # N*N
+        matrix = self.dropout(self.spatialEmbedLinear(self.spatialEmbed)) # N*N
         adaptiveMatrix = torch.mm(self.trainMatrix1,self.trainMatrix2) # N*N
         return F.softmax(F.relu(matrix+adaptiveMatrix),dim=1)
 
