@@ -30,8 +30,7 @@ def generate_graph_seq2seq_io_data(
     feature_list = [data]
     if add_time_in_day:
         #除以ns
-        time_ind = (df.index.values - df.index.values.astype("datetime64[D]"))
-        time_ind = time_ind / time_ind[1]
+        time_ind = (df.index.values - df.index.values.astype("datetime64[D]")) / np.timedelta64(1, "D")
         time_in_day = np.tile(time_ind, [1, num_nodes, 1]).transpose((2, 1, 0))
         feature_list.append(time_in_day)
     if add_day_in_week:
