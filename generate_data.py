@@ -7,6 +7,7 @@ import argparse
 import numpy as np
 import os
 import pandas as pd
+import h5py
 
 
 def generate_graph_seq2seq_io_data(
@@ -14,7 +15,7 @@ def generate_graph_seq2seq_io_data(
 ):
     """
     Generate samples from
-    :param df:
+    :param df: T*N*2
     :param x_offsets:
     :param y_offsets:
     :param add_time_in_day:
@@ -25,20 +26,9 @@ def generate_graph_seq2seq_io_data(
     # y: (epoch_size, output_length, num_nodes, output_dim)
     """
 
-    num_samples, num_nodes = df.shape
-    data = np.expand_dims(df.values, axis=-1)
-    feature_list = [data]
-    if add_time_in_day:
-        # 除以ns
-        time_ind = (df.index.values - df.index.values.astype("datetime64[D]")) / np.timedelta64(1, "D")
-        time_in_day = np.tile(time_ind, [1, num_nodes, 1]).transpose((2, 1, 0))
-        feature_list.append(time_in_day)
-    if add_day_in_week:
-        dow = df.index.dayofweek
-        dow_tiled = np.tile(dow, [1, num_nodes, 1]).transpose((2, 1, 0))
-        feature_list.append(dow_tiled)
+    num_samples, num_nodes, features = df.shape
 
-    data = np.concatenate(feature_list, axis=-1)
+    data = df
     x, y = [], []
     min_t = abs(min(x_offsets))
     max_t = abs(num_samples - abs(max(y_offsets)))  # Exclusive
@@ -53,7 +43,10 @@ def generate_graph_seq2seq_io_data(
 def generate_train_val_test(args):
     # 后面的sequence_length指序长度 x是-12 y是12 过去12步预测未来12步
     seq_length_x, seq_length_y = args.seq_length_x, args.seq_length_y
-    df = pd.read_hdf(args.traffic_df_filename)
+    df = h5py.File(args.traffic_df_filename,'r')
+    a = np.array(df['/data'][()], np.float32)  # date hour x y 2
+    d, h, x, y, f = a.shape
+    a = np.reshape(a, (d * h, x * y, -1))  # T*N*2
     # 0 is the latest observed sample.
     x_offsets = np.sort(np.concatenate((np.arange(-(seq_length_x - 1), 1, 1),)))
     # Predict the next one hour
@@ -61,7 +54,7 @@ def generate_train_val_test(args):
     # x: (num_samples, input_length, num_nodes, input_dim)
     # y: (num_samples, output_length, num_nodes, output_dim)
     x, y = generate_graph_seq2seq_io_data(
-        df,
+        a,
         x_offsets=x_offsets,
         y_offsets=y_offsets,
         add_time_in_day=True,
@@ -71,8 +64,8 @@ def generate_train_val_test(args):
     print("x shape: ", x.shape, ", y shape: ", y.shape)
     # Write the data into npz file.
     num_samples = x.shape[0]
-    num_test = round(num_samples * 0.2)
-    num_train = round(num_samples * 0.7)
+    num_test = round(num_samples * 0.1)
+    num_train = round(num_samples * 0.8)
     num_val = num_samples - num_test - num_train
     x_train, y_train = x[:num_train], y[:num_train]
     x_val, y_val = (
@@ -91,14 +84,15 @@ def generate_train_val_test(args):
             x_offsets=x_offsets.reshape(list(x_offsets.shape) + [1]),
             y_offsets=y_offsets.reshape(list(y_offsets.shape) + [1]),
         )
+    df.close()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output_dir", type=str, default="data/METR-LA-12", help="Output directory.")
-    parser.add_argument("--traffic_df_filename", type=str, default="data/metr-la.h5", help="Raw traffic readings.",)
+    parser.add_argument("--output_dir", type=str, default="data/BJ-Flow", help="Output directory.")
+    parser.add_argument("--traffic_df_filename", type=str, default="data/BJ_FLOW.h5", help="Raw traffic readings.",)
     parser.add_argument("--seq_length_x", type=int, default=12, help="Sequence Length.",)
-    parser.add_argument("--seq_length_y", type=int, default=12, help="Sequence Length.",)
+    parser.add_argument("--seq_length_y", type=int, default=3, help="Sequence Length.",)
     parser.add_argument("--y_start", type=int, default=1, help="Y pred start", )
     parser.add_argument("--dow", action='store_true',)
 

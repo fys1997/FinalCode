@@ -13,20 +13,17 @@ parser.add_argument('--dropout',type=float,default=0.3,help='dropout')
 parser.add_argument('--head',type=int,default=8,help='the multihead count of attention')
 parser.add_argument('--lrate',type=float,default=0.001,help='learning rate')
 parser.add_argument('--wdeacy',type=float,default=0.0001,help='weight decay rate')
-parser.add_argument('--data',type=str,default='data/METR-LA-12/',help='data path')
+parser.add_argument('--data',type=str,default='data/BJ-Flow/',help='data path')
 parser.add_argument('--batch_size',type=int,default=1,help='batch size')
 parser.add_argument('--epochs',type=int,default=100,help='')
 parser.add_argument('--print_every',type=int,default=100,help='')
 parser.add_argument('--save',type=str,default='modelSave/metr.pth',help='save path')
 parser.add_argument('--tradGcn',type=bool,default=False,help='whether use tradGcn')
-parser.add_argument('--dmodel',type=int,default=64,help='transformerEncoder dmodel')
-parser.add_argument('--num_embedding',type=int,default=288,help='')
+parser.add_argument('--dmodel',type=int,default=32,help='transformerEncoder dmodel')
 parser.add_argument('--encoderBlocks',type=int,default=2,help=' encoder block numbers')
 parser.add_argument('--preTrain',type=bool,default=False,help='whether use preTrain model')
-parser.add_argument('--seed',type=int,default=100,help='random seed')
-parser.add_argument('--location_file',type=str,default='data/graph_sensor_locations.csv',help='sensor location csv')
-parser.add_argument('--distance_file',type=str,default='data/sensor_graph/SE(METR).txt',help='distance adjacency matrix file')
-parser.add_argument('--clip',type=int,default=8,help='gradient norm clip')
+parser.add_argument('--seed',type=int,default=3407,help='random seed')
+parser.add_argument('--clip',type=int,default=5,help='gradient norm clip')
 parser.add_argument('--decoderBlocks',type=int,default=2,help='decoder block number')
 
 args=parser.parse_args()
@@ -44,8 +41,11 @@ def main():
     N=dataloader['N']
     outputT=dataloader['outputT']
 
+    NC = util.get_node_characteristics(args.device) # N*989
+    EC = util.get_edge_characteristics(args.device) # N*N*32
+
     print(args)
-    engine=trainer(device=args.device,args=args,scaler=scaler,T=T,N=N,outputT=outputT)
+    engine=trainer(device=args.device,args=args,scaler=scaler,T=T,N=N,outputT=outputT, NC=NC, EC=EC)
     print("start training...",flush=True)
     his_loss=[]
     val_time=[]

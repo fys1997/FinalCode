@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import os
+import h5py
 
 
 class DataLoader(object):
@@ -61,26 +62,26 @@ class StandardScaler():
         return (data * self.std) + self.mean
 
 
-def load_dataset(dataset_dir, batch_size, valid_batch_size= None, test_batch_size=None):
+def load_dataset(dataset_dir, batch_size, valid_batch_size=None, test_batch_size=None):
     data = {}
     for category in ['train', 'val', 'test']:
         cat_data = np.load(os.path.join(dataset_dir, category + '.npz'))
         data['x_' + category] = cat_data['x']
         data['y_' + category] = cat_data['y']
-    scaler = StandardScaler(mean=data['x_train'][...,0].mean(), std=data['x_train'][...,0].std())
-    T=data['x_train'].shape[1]
-    N=data['x_train'].shape[2]
-    outputT=data['y_train'].shape[1]
+    scaler = StandardScaler(mean=data['x_train'].mean(), std=data['x_train'].std())
+    T = data['x_train'].shape[1]
+    N = data['x_train'].shape[2]
+    outputT = data['y_train'].shape[1]
     # Data format
     for category in ['train', 'val', 'test']:
-        data['x_' + category][..., 0] = scaler.transform(data['x_' + category][..., 0])
+        data['x_' + category] = scaler.transform(data['x_' + category])
     data['train_loader'] = DataLoader(data['x_train'], data['y_train'], batch_size)
     data['val_loader'] = DataLoader(data['x_val'], data['y_val'], valid_batch_size)
     data['test_loader'] = DataLoader(data['x_test'], data['y_test'], test_batch_size)
     data['scaler'] = scaler
-    data['T']=T
-    data['N']=N
-    data['outputT']=outputT
+    data['T'] = T
+    data['N'] = N
+    data['outputT'] = outputT
     return data
 
 
@@ -88,11 +89,11 @@ def masked_mse(preds, labels, null_val=np.nan):
     if np.isnan(null_val):
         mask = ~torch.isnan(labels)
     else:
-        mask = (labels!=null_val)
+        mask = (labels != null_val)
     mask = mask.float()
     mask /= torch.mean((mask))
     mask = torch.where(torch.isnan(mask), torch.zeros_like(mask), mask)
-    loss = (preds-labels)**2
+    loss = (preds - labels) ** 2
     loss = loss * mask
     loss = torch.where(torch.isnan(loss), torch.zeros_like(loss), loss)
     return torch.mean(loss)
@@ -102,11 +103,11 @@ def masked_mae(preds, labels, null_val=np.nan):
     if np.isnan(null_val):
         mask = ~torch.isnan(labels)
     else:
-        mask = (labels!=null_val)
+        mask = (labels != null_val)
     mask = mask.float()
-    mask /=  torch.mean((mask))
+    mask /= torch.mean((mask))
     mask = torch.where(torch.isnan(mask), torch.zeros_like(mask), mask)
-    loss = torch.abs(preds-labels)
+    loss = torch.abs(preds - labels)
     loss = loss * mask
     loss = torch.where(torch.isnan(loss), torch.zeros_like(loss), loss)
     return torch.mean(loss)
@@ -120,18 +121,45 @@ def masked_mape(preds, labels, null_val=np.nan):
     if np.isnan(null_val):
         mask = ~torch.isnan(labels)
     else:
-        mask = (labels!=null_val)
+        mask = (labels != null_val)
     mask = mask.float()
-    mask /=  torch.mean((mask))
+    mask /= torch.mean((mask))
     mask = torch.where(torch.isnan(mask), torch.zeros_like(mask), mask)
-    loss = torch.abs(preds-labels)/labels
+    loss = torch.abs(preds - labels) / labels
     loss = loss * mask
     loss = torch.where(torch.isnan(loss), torch.zeros_like(loss), loss)
     return torch.mean(loss)
 
 
 def metric(pred, real):
-    mae = masked_mae(pred,real,0.0).item()
-    mape = masked_mape(pred,real,0.0).item()
-    rmse = masked_rmse(pred,real,0.0).item()
-    return mae,mape,rmse
+    mae = masked_mae(pred, real, 0.0).item()
+    mape = masked_mape(pred, real, 0.0).item()
+    rmse = masked_rmse(pred, real, 0.0).item()
+    return mae, mape, rmse
+
+
+def load_h5(filename, keywords):
+    f = h5py.File(filename, 'r')
+    data = []
+    for name in keywords:
+        data.append(np.array(f[name]))
+    f.close()
+    if len(data) == 1:
+        return data[0]
+    return data
+
+
+# 返回边特性信息
+def get_edge_characteristics(device):
+    adj_feature = load_h5('data/BJ_FLOW_Feature/BJ_GRAPH.h5', ['data'])  # N*N*32
+    adj_feature = (adj_feature - np.mean(adj_feature, axis=0)) / (np.std(adj_feature, axis=0) + 1e-8)
+    return torch.from_numpy(adj_feature).to(device)
+
+
+# 返回节点特性信息
+def get_node_characteristics(device):
+    node_feature = load_h5('data/BJ_FLOW_Feature/BJ_FEATURE.h5', ['embeddings'])  # row*column*989
+    row, col, _ = node_feature.shape
+    node_feature = np.reshape(node_feature, (row * col, -1))  # N*989
+    node_feature = (node_feature - np.mean(node_feature, axis=0)) / (np.std(node_feature, axis=0) + 1e-8)
+    return torch.from_numpy(node_feature).to(device)
