@@ -16,7 +16,7 @@ parser.add_argument('--wdeacy',type=float,default=0.0001,help='weight decay rate
 parser.add_argument('--data',type=str,default='data/BJ-Flow/',help='data path')
 parser.add_argument('--batch_size',type=int,default=1,help='batch size')
 parser.add_argument('--epochs',type=int,default=100,help='')
-parser.add_argument('--print_every',type=int,default=100,help='')
+parser.add_argument('--print_every',type=int,default=1,help='')
 parser.add_argument('--save',type=str,default='modelSave/metr.pth',help='save path')
 parser.add_argument('--tradGcn',type=bool,default=False,help='whether use tradGcn')
 parser.add_argument('--dmodel',type=int,default=32,help='transformerEncoder dmodel')

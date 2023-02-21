@@ -6,7 +6,7 @@ from __future__ import unicode_literals
 import argparse
 import numpy as np
 import os
-import pandas as pd
+import util
 import h5py
 
 
@@ -87,14 +87,71 @@ def generate_train_val_test(args):
     df.close()
 
 
+def generate_x_y(data, input_len, output_len):
+    mask = np.sum(data, axis=(1, 2)) > 5000
+
+    n_timestamp, num_nodes, _ = data.shape
+
+    flow = data
+
+    feature, data, label = [], [], []
+    for i in range(n_timestamp - input_len - output_len + 1):
+        if mask[i + input_len: i + input_len + output_len].sum() != output_len:
+            continue
+
+        data.append(flow[i: i + input_len])
+        label.append(flow[i + input_len: i + input_len + output_len])
+
+    data = np.stack(data)  # [B, T, N, D]
+    label = np.stack(label)  # [B, T, N, D]
+    return data, label
+
+
+def generate_data(args):
+    input_len = args.seq_length_x
+    output_len = args.seq_length_y
+    data = util.load_h5(args.traffic_df_filename, ['data'])
+    days, hours, rows, cols, _ = data.shape
+
+    data = np.reshape(data, (days * hours, rows * cols, -1))
+
+    n_timestamp = data.shape[0]
+    num_train = int(n_timestamp * 0.8)
+    num_eval = int(n_timestamp * 0.1)
+    num_test = n_timestamp - num_train - num_eval
+
+    train = data[:num_train]
+    valid = data[num_train: num_train + num_eval]
+    test = data[-num_test:]
+
+    x_train, y_train = generate_x_y(data=train, input_len=input_len, output_len=output_len)
+    x_val, y_val = generate_x_y(data=valid, input_len=input_len, output_len=output_len)
+    x_test, y_test = generate_x_y(data=test, input_len=input_len, output_len=output_len)
+
+    x_offsets = np.sort(np.concatenate((np.arange(-(input_len - 1), 1, 1),)))
+    # Predict the next one hour
+    y_offsets = np.sort(np.arange(args.y_start, (output_len + 1), 1))
+
+    for cat in ["train", "val", "test"]:
+        _x, _y = locals()["x_" + cat], locals()["y_" + cat]
+        print(cat, "x: ", _x.shape, "y:", _y.shape)
+        np.savez_compressed(
+            os.path.join(args.output_dir, f"{cat}.npz"),
+            x=_x,
+            y=_y,
+            x_offsets=x_offsets.reshape(list(x_offsets.shape) + [1]),
+            y_offsets=y_offsets.reshape(list(y_offsets.shape) + [1]),
+        )
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--output_dir", type=str, default="data/BJ-Flow", help="Output directory.")
-    parser.add_argument("--traffic_df_filename", type=str, default="data/BJ_FLOW.h5", help="Raw traffic readings.",)
-    parser.add_argument("--seq_length_x", type=int, default=12, help="Sequence Length.",)
-    parser.add_argument("--seq_length_y", type=int, default=3, help="Sequence Length.",)
+    parser.add_argument("--traffic_df_filename", type=str, default="data/BJ_FLOW.h5", help="Raw traffic readings.", )
+    parser.add_argument("--seq_length_x", type=int, default=12, help="Sequence Length.", )
+    parser.add_argument("--seq_length_y", type=int, default=3, help="Sequence Length.", )
     parser.add_argument("--y_start", type=int, default=1, help="Y pred start", )
-    parser.add_argument("--dow", action='store_true',)
+    parser.add_argument("--dow", action='store_true', )
 
     args = parser.parse_args()
     if os.path.exists(args.output_dir):
@@ -102,4 +159,4 @@ if __name__ == "__main__":
         if reply[0] != 'y': exit
     else:
         os.makedirs(args.output_dir)
-    generate_train_val_test(args)
+    generate_data(args)
