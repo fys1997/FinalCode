@@ -137,29 +137,3 @@ def metric(pred, real):
     rmse = masked_rmse(pred, real, 0.0).item()
     return mae, mape, rmse
 
-
-def load_h5(filename, keywords):
-    f = h5py.File(filename, 'r')
-    data = []
-    for name in keywords:
-        data.append(np.array(f[name]))
-    f.close()
-    if len(data) == 1:
-        return data[0]
-    return data
-
-
-# 返回边特性信息
-def get_edge_characteristics(device):
-    adj_feature = load_h5('data/BJ_FLOW_Feature/BJ_GRAPH.h5', ['data'])  # N*N*32
-    adj_feature = (adj_feature - np.mean(adj_feature, axis=0)) / (np.std(adj_feature, axis=0) + 1e-8)
-    return torch.from_numpy(adj_feature).to(device)
-
-
-# 返回节点特性信息
-def get_node_characteristics(device):
-    node_feature = load_h5('data/BJ_FLOW_Feature/BJ_FEATURE.h5', ['embeddings'])  # row*column*989
-    row, col, _ = node_feature.shape
-    node_feature = np.reshape(node_feature, (row * col, -1))  # N*989
-    node_feature = (node_feature - np.mean(node_feature, axis=0)) / (np.std(node_feature, axis=0) + 1e-8)
-    return torch.from_numpy(node_feature).to(device)

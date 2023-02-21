@@ -36,10 +36,8 @@ def main():
     T = dataloader['T']
     N = dataloader['N']
     outputT = dataloader['outputT']
-    NC = util.get_node_characteristics(args.device)  # N*989
-    EC = util.get_edge_characteristics(args.device)  # N*N*32
 
-    model=mixNet(args=args,device=args.device,T=T,N=N,outputT=outputT, NC=NC, EC=EC)
+    model=mixNet(args=args,device=args.device,T=T,N=N,outputT=outputT)
     model.load_state_dict(torch.load(args.save),strict=True)
     model.eval()
     model.to(args.device)
@@ -83,7 +81,7 @@ def main():
     armse = []
     for i in range(outputT):
         pred = scaler.inverse_transform(yhat[:, i, :,:])
-        real = realy[:, i, :,0]
+        real = realy[:, i, :,:]
         metrics = util.metric(pred, real)
         log = 'Evaluate best model on test data for horizon {:d}, Test MAE: {:.4f}, Test MAPE: {:.4f}, Test RMSE: {:.4f}'
         print(log.format(i + 1, metrics[0], metrics[1], metrics[2]))

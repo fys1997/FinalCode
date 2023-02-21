@@ -4,7 +4,7 @@ import model.GmanGcn as GG
 
 
 class mixNet(nn.Module):
-    def __init__(self, args, device, T, N, outputT, NC, EC):
+    def __init__(self, args, device, T, N, outputT):
         '''
 
         :param args: 一些设置的参数
@@ -12,7 +12,7 @@ class mixNet(nn.Module):
         '''
         super(mixNet, self).__init__()
 
-        self.GcnAtteNet = GG.GcnAtteNet(N=N, Tin=T, Tout=outputT, args=args, NC=NC, EC=EC)
+        self.GcnAtteNet = GG.GcnAtteNet(N=N, Tin=T, Tout=outputT, args=args)
 
     def forward(self, X):
         """

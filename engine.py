@@ -6,16 +6,16 @@ import torch.nn as nn
 
 
 class trainer():
-    def __init__(self, device, args, scaler, T, N, outputT, NC, EC):
+    def __init__(self, device, args, scaler, T, N, outputT):
 
         # 加载模型，根据preTrain决定加载已经训练好的best model或是重新开始训练模型
         if args.preTrain is not None and args.preTrain:
-            self.model = mixNet(args=args, device=args.device, T=T, N=N, outputT=outputT, NC=NC, EC=EC)
+            self.model = mixNet(args=args, device=args.device, T=T, N=N, outputT=outputT)
             self.model.to(device)
             self.model.load_state_dict(torch.load(args.save), strict=True)
             print("model load successfully")
         else:
-            self.model = mixNet(args, device, T, N, outputT, NC=NC, EC=EC)
+            self.model = mixNet(args, device, T, N, outputT)
             self.model.to(device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=args.lrate, weight_decay=args.wdeacy)
         self.loss = util.masked_mae

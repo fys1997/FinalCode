@@ -16,10 +16,10 @@ parser.add_argument('--wdeacy',type=float,default=0.0001,help='weight decay rate
 parser.add_argument('--data',type=str,default='data/BJ-Flow/',help='data path')
 parser.add_argument('--batch_size',type=int,default=1,help='batch size')
 parser.add_argument('--epochs',type=int,default=100,help='')
-parser.add_argument('--print_every',type=int,default=100,help='')
+parser.add_argument('--print_every',type=int,default=1,help='')
 parser.add_argument('--save',type=str,default='modelSave/metr.pth',help='save path')
 parser.add_argument('--tradGcn',type=bool,default=False,help='whether use tradGcn')
-parser.add_argument('--dmodel',type=int,default=32,help='transformerEncoder dmodel')
+parser.add_argument('--dmodel',type=int,default=64,help='transformerEncoder dmodel')
 parser.add_argument('--encoderBlocks',type=int,default=2,help=' encoder block numbers')
 parser.add_argument('--preTrain',type=bool,default=False,help='whether use preTrain model')
 parser.add_argument('--seed',type=int,default=3407,help='random seed')
@@ -41,11 +41,8 @@ def main():
     N=dataloader['N']
     outputT=dataloader['outputT']
 
-    NC = util.get_node_characteristics(args.device) # N*989
-    EC = util.get_edge_characteristics(args.device) # N*N*32
-
     print(args)
-    engine=trainer(device=args.device,args=args,scaler=scaler,T=T,N=N,outputT=outputT, NC=NC, EC=EC)
+    engine=trainer(device=args.device,args=args,scaler=scaler,T=T,N=N,outputT=outputT)
     print("start training...",flush=True)
     his_loss=[]
     val_time=[]
