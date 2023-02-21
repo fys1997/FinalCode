@@ -26,7 +26,8 @@ class GCN(nn.Module):
             for i in range(self.hops):
                 self.tradGcnW.append(nn.Linear(self.T, self.T))
         else:
-            self.gcnLinear = nn.Linear(Tin * (self.hops + 1), Tin)
+            self.gcnLinear = nn.Conv2d(in_channels=args.dmodel * (self.hops + 1), out_channels=args.dmodel,
+                                       kernel_size=(1, 1), padding=(0, 0), stride=(1, 1), bias=True)
 
     def forward(self, X, matrix):
         """
@@ -47,12 +48,13 @@ class GCN(nn.Module):
                 # W = torch.reshape(W, (self.N, self.T, self.T))  # N*T*T
                 # 完成AX
                 Hnow = torch.einsum("nk,bdkt->bdnt", (matrix, Hbefore))  # batch*dmodel*N*T
+                Hnow = Hnow.contiguous()
                 # 完成XW
                 # Hnow = torch.einsum("bdni,nit->bdnt", (Hnow, W))  # batch*dmodel*N*T
                 Hnow = torch.sigmoid(X + Hnow) * torch.tanh(X + Hnow)
                 H.append(Hnow)
                 Hbefore = Hnow
-            H = torch.cat(H, dim=3)  # batch*dmodel*N*(T*(hops+1))
+            H = torch.cat(H, dim=1)  # batch*(dmodel*(hops+1))*N*T*
             Hout = self.gcnLinear(H)  # batch*dmodel*N*T
             Hout = self.dropout(Hout)  # batch*dmodel*N*T
         else:

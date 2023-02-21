@@ -33,13 +33,13 @@ class AdjMeta(nn.Module):
 
         return: Adj 邻接矩阵 [N*N]
         """
-        EMC = EMC.unsqueeze(0).permute(0,3,1,2).contiguous() # 1*32*N*N
+        EMC = EMC.unsqueeze(0).transpose(1,3) # 1*32*N*N
         EmcAdj = self.EmcAdjCnn(EMC).squeeze(0).squeeze(0) # N*N
         EmcAdj = F.softmax(F.relu(EmcAdj),dim=1) # N*N
 
         NmcAdjEm1 = self.dropout(self.NmcAdjEmLinear1(NMC)) # N*M
         NmcAdjEm2 = self.dropout(self.NmcAdjEmLinear2(NMC)) # N*M
-        NmcAdjEm2 = NmcAdjEm2.permute(1,0).contiguous() # M*N
+        NmcAdjEm2 = NmcAdjEm2.transpose(0,1) # M*N
         NmcAdj = F.softmax(F.relu(torch.mm(NmcAdjEm1,NmcAdjEm2)),dim=1)
 
         AdpAdj = F.softmax(F.relu(torch.mm(self.AdpAdjEm1,self.AdpAdjEm2)),dim=1) # NN

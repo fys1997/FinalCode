@@ -20,7 +20,8 @@ class GcnAttentionCell(nn.Module):
 
         self.device=args.device
         # 设置gate门
-        self.gate=nn.Linear(in_features=2*args.dmodel,out_features=args.dmodel)
+        self.gate = nn.Conv2d(in_channels=2*args.dmodel, out_channels=args.dmodel,
+                              kernel_size=(1, 1), padding=(0,0), stride=(1,1), bias=True)
         # 设置图卷积层捕获空间特征
         self.Gcn=GCN.GCN(Tin=Tin, N=N, args=args)
         self.dropout = nn.Dropout(p=args.dropout)
@@ -50,11 +51,14 @@ class GcnAttentionCell(nn.Module):
         value,atten=self.temporalAttention.forward(query=query, key=key, value=value, atten_mask=atten_mask, NMC=NMC) # batch*N*T*dmodel
 
         # 做gate
-        gateInput=torch.cat([gcnOutput,value],dim=3) # batch*N*Tin*2dmodel
-        gateInput=self.dropout(self.gate(gateInput)) # batch*N*Tin*dmodel
-        gateInput=self.batchNormGate(gateInput.permute(0,3,1,2).contiguous()) # batch*dmodel*N*Tin
-        z=torch.sigmoid(gateInput.permute(0,2,3,1).contiguous()) # batch*N*Tin*dmodel
-        finalHidden=z*gcnOutput+(1-z)*value # batch*N*Tin*dmodel
+        gcnOutput = gcnOutput.transpose(1, 3) # batch*D*T*N
+        value = value.transpose(1, 3) # batch*D*T*N
+        gateInput=torch.cat([gcnOutput,value],dim=1) # batch*2D*T*N
+        gateInput=self.dropout(self.gate(gateInput)) # batch*D*T*N
+        z=torch.sigmoid(gateInput) # batch*D*T*N
+        finalHidden=z*gcnOutput+(1-z)*value # batch*D*T*N
+        finalHidden = self.batchNormGate(finalHidden) # batch*D*T*N
+        finalHidden = finalHidden.transpose(1, 3) # batch*N*T*D
 
         return finalHidden # batch*N*Tin*dmodel
 
@@ -77,7 +81,8 @@ class GcnEncoder(nn.Module):
         self.device=args.device
         self.encoderBlocks=args.encoderBlocks
 
-        self.xFull=nn.Linear(in_features=2,out_features=args.dmodel)
+        self.xFull=nn.Conv2d(in_channels=2,out_channels=args.dmodel,
+                             kernel_size=(1, 1), padding=(0,0), stride=(1,1), bias=True)
         self.N=N
 
     def forward(self,x, NMC, EMC):
@@ -86,7 +91,8 @@ class GcnEncoder(nn.Module):
         :param x: 流量数据:[batch*N*Tin*2]
         :return:
         """
-        x=self.xFull(x) # batch*N*Tin*dmodel
+        x=self.xFull(x.transpose(1,3)) # batch*D*T*N
+        x = x.transpose(1,3) # batch*N*T*D
 
         hidden=x # batch*N*Tin*dmodel
         skip=0
@@ -105,7 +111,8 @@ class GcnDecoder(nn.Module):
         self.Tin=Tin
         self.Tout=Tout
         self.TinToutWLearner = NodeNormalWLearner(args=args, N=N, in_features=Tin, out_features=Tout)
-        self.predictLinear = nn.Linear(in_features=args.dmodel, out_features=2)
+        self.predictLinear = nn.Conv2d(in_channels=args.dmodel, out_channels=2,
+                                       kernel_size=(1, 1), padding=(0,0), stride=(1,1), bias=True)
 
         self.decoderBlock = nn.ModuleList()
         self.decoderBlocks = args.decoderBlocks
@@ -121,7 +128,7 @@ class GcnDecoder(nn.Module):
         :param x: # batch*N*Tin*dmodel
         :return:
         """
-        TinToutW = self.TinToutWLearner(NMC) # N*TinTout
+        TinToutW = self.TinToutWLearner(NMC) # N*Tin*Tout
         x = torch.einsum("bntd,nto->bnod",(x,TinToutW)) # batch*N*Tout*D
 
         hidden = x  # batch*N*Tout*dmodel
@@ -131,9 +138,9 @@ class GcnDecoder(nn.Module):
         for i in range(self.decoderBlocks):
             hidden = self.decoderBlock[i].forward(hidden=hidden, matrix=matrix, EMC=EMC, NMC=NMC)
             skip = skip+hidden
-        x=self.dropout(self.predictLinear(x+skip)) # batch*N*Tout*2
+        x=self.dropout(self.predictLinear((x+skip).transpose(1,3))) # batch*2*Tout*N
 
-        return x # batch*N*Tout*2
+        return x.transpose(1, 3) # batch*N*Tout*2
 
 
 class TemMulHeadAtte(nn.Module):
@@ -154,7 +161,6 @@ class TemMulHeadAtte(nn.Module):
         self.AttentionLearner = KQVLinear(args=args, N=N, T=T)
 
         self.OutCnn = nn.Conv2d(in_channels=d_values*self.num_heads,out_channels=self.dmodel,kernel_size=(1,1))
-        self.batchNormOut = nn.BatchNorm2d(num_features=self.dmodel)
         self.LeakeyRelu = nn.LeakyReLU(negative_slope=0.01)
 
     def forward(self, query, key, value, atten_mask, NMC):
@@ -172,20 +178,24 @@ class TemMulHeadAtte(nn.Module):
         Wk,bk,Wq,bq,Wv,bv = self.AttentionLearner(NMC) # (N*dmodel*(dkeys*num_heads)), (N*(dkeys*num_heads))
 
         query = torch.einsum("bnti,nik->bntk",(query,Wq)) # batch*N*T*(dk*heads)
+        query = query.contiguous()
         query = query+bq.unsqueeze(1).unsqueeze(0) # batch*N*T*(dk*heads)
         query = query.view(B,N,T,H,-1) # batch*N*T*heads*dkeys
 
         key = torch.einsum("bnti,nik->bntk",(key,Wk)) # batch*N*T*(dk*heads)
+        key = key.contiguous()
         key = key+bk.unsqueeze(1).unsqueeze(0) # batch*N*T*(dk*heads)
         key = key.view(B,N,T,H,-1) # batch*N*T*heads*dkeys
 
         value = torch.einsum("bnti,nik->bntk", (value, Wv))  # batch*N*T*(dk*heads)
+        value = value.contiguous()
         value = value+bv.unsqueeze(1).unsqueeze(0) # batch*N*T*(dk*heads)
         value = value.view(B,N,T,H,-1) # batch*N*T*heads*dkeys
 
         scale=1./sqrt(query.size(4))
 
         scores = self.LeakeyRelu(torch.einsum("bnthe,bnshe->bnhts",(query,key))) # batch*N*head*Tq*Ts
+        scores = scores.contiguous()
         if atten_mask is not None:
             scores.masked_fill_(atten_mask,-np.inf) # batch*N*head*Tq*Ts
         scores=torch.softmax(scale*scores,dim=-1)
@@ -193,10 +203,9 @@ class TemMulHeadAtte(nn.Module):
         value=torch.einsum("bnhts,bnshd->bnthd",(scores,value)) # batch*N*T*heads*d_values
         value=value.contiguous()
         value=value.view(B,N,T,-1) # batch*N*T*(heads*d_values)
-        value = self.OutCnn(value.permute(0,3,1,2).contiguous()) # batch*D*N*T
+        value = self.OutCnn(value.transpose(1, 3)) # batch*D*T*N
 
-        value = self.batchNormOut(value) # batch*dmodel*N*T
-        value = torch.sigmoid(value).permute(0,2,3,1).contiguous() # batch*N*T*dmodel
+        value = F.relu(value).transpose(1, 3) # batch*N*T*D
 
         # 返回最后的向量和得到的attention分数
         return value,scores
