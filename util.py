@@ -137,3 +137,13 @@ def metric(pred, real):
     rmse = masked_rmse(pred, real, 0.0).item()
     return mae, mape, rmse
 
+
+def load_h5(filename, keywords):
+    f = h5py.File(filename, 'r')
+    data = []
+    for name in keywords:
+        data.append(np.array(f[name]))
+    f.close()
+    if len(data) == 1:
+        return data[0]
+    return data
