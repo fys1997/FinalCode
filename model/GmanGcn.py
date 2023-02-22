@@ -9,6 +9,7 @@ from model.AttentionLearner import KQVLinear
 from model.AdjLearner import AdjMeta
 from model.NCL import NCL
 from model.NodeNormalWLearner import NodeNormalWLearner
+from model.ECL import ECL
 
 
 class GcnAttentionCell(nn.Module):
@@ -220,10 +221,11 @@ class GcnAtteNet(nn.Module):
         self.NC = NC
         self.EC = EC
         self.NCL = NCL(args,N)
+        self.ECL = ECL(args=args, N=N)
 
     def forward(self,X):
         NMC = self.NCL(self.NC) # N*D
-        EMC = self.EC # N*N*32
+        EMC = self.ECL(self.EC) # 1*D*N*N
         output = self.GcnEncoder(X, NMC=NMC, EMC=EMC)  # batch*N*Tin*dmodel
         result = self.GcnDecoder(output, NMC=NMC, EMC=EMC)  # batch*N*Tout*2
         return result

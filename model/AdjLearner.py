@@ -16,7 +16,7 @@ class AdjMeta(nn.Module):
         self.T = T
         self.D = args.dmodel
 
-        self.EmcAdjCnn = nn.Conv2d(in_channels=32, out_channels=1, kernel_size=(1, 1))
+        self.EmcAdjCnn = nn.Conv2d(in_channels=self.D, out_channels=1, kernel_size=(1, 1))
 
         self.NmcAdjEmLinear1 = nn.Linear(in_features=self.D, out_features=args.M)
         self.NmcAdjEmLinear2 = nn.Linear(in_features=self.D, out_features=args.M)
@@ -28,12 +28,11 @@ class AdjMeta(nn.Module):
 
     def forward(self, EMC, NMC):
         """
-        EMC: 边元特性 [N*N*32]
+        EMC: 边元特性 [1*D*N*N]
         NMC: 节点元特性[N*D]
 
         return: Adj 邻接矩阵 [N*N]
         """
-        EMC = EMC.unsqueeze(0).transpose(1,3) # 1*32*N*N
         EmcAdj = self.EmcAdjCnn(EMC).squeeze(0).squeeze(0) # N*N
         EmcAdj = F.softmax(F.relu(EmcAdj),dim=1) # N*N
 
