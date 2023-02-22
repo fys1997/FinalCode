@@ -34,17 +34,17 @@ class trainer():
 
         X = X.permute(0, 2, 1, 3).contiguous()  # batch*N*T*2
 
-        output = self.model(X)  # batch*N*T*2
-        output = output.permute(0, 2, 1, 3).contiguous()  # batch*T*N*2
+        output = self.model(X)  # batch*N*T*1
+        output = output.permute(0, 2, 1, 3).contiguous()  # batch*T*N*1
         predict = self.scaler.inverse_transform(output)
 
-        loss = self.loss(predict, real_val, 0.0)
+        loss = self.loss(predict, real_val[...,0:1], 0.0)
         loss.backward()
         if self.clip is not None:
             torch.nn.utils.clip_grad_norm_(parameters=self.model.parameters(),max_norm=self.clip)
         self.optimizer.step()
-        mape = util.masked_mape(predict, real_val, 0.0).item()
-        rmse = util.masked_rmse(predict, real_val, 0.0).item()
+        mape = util.masked_mape(predict, real_val[...,0:1], 0.0).item()
+        rmse = util.masked_rmse(predict, real_val[...,0:1], 0.0).item()
         return loss.item(), mape, rmse
 
     def eval(self, X, real_val):
@@ -54,7 +54,7 @@ class trainer():
         output = self.model(X) # batch*N*T*2
         output = output.permute(0, 2, 1, 3).contiguous()  # batch*T*N*2
         predict = self.scaler.inverse_transform(output)
-        loss = self.loss(predict, real_val, 0.0)
-        mape = util.masked_mape(predict, real_val, 0.0).item()
-        rmse = util.masked_rmse(predict, real_val, 0.0).item()
+        loss = self.loss(predict, real_val[...,0:1], 0.0)
+        mape = util.masked_mape(predict, real_val[...,0:1], 0.0).item()
+        rmse = util.masked_rmse(predict, real_val[...,0:1], 0.0).item()
         return loss.item(), mape, rmse

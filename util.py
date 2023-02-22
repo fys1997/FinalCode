@@ -68,13 +68,13 @@ def load_dataset(dataset_dir, batch_size, valid_batch_size=None, test_batch_size
         cat_data = np.load(os.path.join(dataset_dir, category + '.npz'))
         data['x_' + category] = cat_data['x']
         data['y_' + category] = cat_data['y']
-    scaler = StandardScaler(mean=data['x_train'].mean(), std=data['x_train'].std())
+    scaler = StandardScaler(mean=data['x_train'][...,0].mean(), std=data['x_train'][...,0].std())
     T = data['x_train'].shape[1]
     N = data['x_train'].shape[2]
     outputT = data['y_train'].shape[1]
     # Data format
     for category in ['train', 'val', 'test']:
-        data['x_' + category] = scaler.transform(data['x_' + category])
+        data['x_' + category][...,0] = scaler.transform(data['x_' + category][...,0])
     data['train_loader'] = DataLoader(data['x_train'], data['y_train'], batch_size)
     data['val_loader'] = DataLoader(data['x_val'], data['y_val'], valid_batch_size)
     data['test_loader'] = DataLoader(data['x_test'], data['y_test'], test_batch_size)

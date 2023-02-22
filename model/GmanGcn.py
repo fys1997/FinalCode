@@ -102,7 +102,7 @@ class GcnDecoder(nn.Module):
         self.Tin=Tin
         self.Tout=Tout
         self.TinToutCNN = nn.Conv2d(in_channels=Tin, out_channels=Tout, kernel_size=(1,1))
-        self.predictLinear = nn.Linear(in_features=args.dmodel, out_features=2)
+        self.predictLinear = nn.Linear(in_features=args.dmodel, out_features=1)
 
         self.decoderBlock = nn.ModuleList()
         self.decoderBlocks = args.decoderBlocks
@@ -199,7 +199,7 @@ class GcnAtteNet(nn.Module):
 
     def forward(self,X):
         output = self.GcnEncoder(X)  # batch*N*Tin*dmodel
-        result = self.GcnDecoder(output)  # batch*N*Tout*2
+        result = self.GcnDecoder(output)  # batch*N*Tout*1
         return result
 
 
