@@ -28,6 +28,10 @@ parser.add_argument('--location_file',type=str,default='data/graph_sensor_locati
 parser.add_argument('--distance_file',type=str,default='data/sensor_graph/SE(METR).txt',help='distance adjacency matrix file')
 parser.add_argument('--clip',type=int,default=8,help='gradient norm clip')
 parser.add_argument('--decoderBlocks',type=int,default=2,help='decoder block number')
+parser.add_argument('--onlyEC', type=bool, default=False, help="only EMC used in adj")
+parser.add_argument('--onlyAdp', type=bool, default=False, help="only Adp use in adj")
+parser.add_argument('--normalTA', type=bool, default=False, help="normal attention or meta Attention")
+
 
 args=parser.parse_args()
 
