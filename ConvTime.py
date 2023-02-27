@@ -95,21 +95,22 @@ def main():
                 if iter % args.print_every == 0:
                     log = 'Iter: {:03d}, Train Loss: {:.4f}, Train MAPE: {:.4f}, Train RMSE: {:.4f}'
                     print(log.format(iter, train_loss[-1], train_mape[-1], train_rmse[-1]), flush=True)
-                valid_loss = []
-                valid_mape = []
-                valid_rmse = []
-                for iter, (x, y) in enumerate(dataloader['val_loader'].get_iterator()):
-                    testx = torch.Tensor(x).to(args.device)
-                    testy = torch.Tensor(y).to(args.device)
-                    metrics = engine.eval(testx, testy)
-                    valid_loss.append(metrics[0])
-                    valid_mape.append(metrics[1])
-                    valid_rmse.append(metrics[2])
-                mvalid_loss = np.mean(valid_loss)
-                mvalid_mape = np.mean(valid_mape)
-                mvalid_rmse = np.mean(valid_rmse)
-                string = str(iterNum)+" "+str(mvalid_loss)+" "+str(mvalid_rmse)+" "+str(mvalid_mape)+"\n"
-                f.writelines(string)
+                if iterNum % args.print_every == 0:
+                    valid_loss = []
+                    valid_mape = []
+                    valid_rmse = []
+                    for iter, (x, y) in enumerate(dataloader['val_loader'].get_iterator()):
+                        testx = torch.Tensor(x).to(args.device)
+                        testy = torch.Tensor(y).to(args.device)
+                        metrics = engine.eval(testx, testy)
+                        valid_loss.append(metrics[0])
+                        valid_mape.append(metrics[1])
+                        valid_rmse.append(metrics[2])
+                    mvalid_loss = np.mean(valid_loss)
+                    mvalid_mape = np.mean(valid_mape)
+                    mvalid_rmse = np.mean(valid_rmse)
+                    string = str(iterNum)+" "+str(mvalid_loss)+" "+str(mvalid_rmse)+" "+str(mvalid_mape)+"\n"
+                    f.writelines(string)
                 iterNum = iterNum+1
 
             t2 = time.time()
