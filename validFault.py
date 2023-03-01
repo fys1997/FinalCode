@@ -57,7 +57,8 @@ def main():
     mape=[]
     rmse=[]
     for iter,(x,y) in enumerate(dataloader['val_loader'].get_iterator()):
-        testx=F.dropout3d(torch.Tensor(x).to(args.device), p= args.dropout) # batch*T*N*2
+        testx=torch.Tensor(x).to(args.device) # batch*T*N*2
+        testx[..., 0:1] = F.dropout3d(testx[..., 0:1], p=args.dropout)
         testy=torch.Tensor(y).to(args.device) #batch*T*N*2
         with torch.no_grad():
             preds=model(testx.permute(0,2,1,3).contiguous(),testy.permute(0,2,1,3).contiguous(),0).permute(0,2,1).contiguous()
@@ -73,7 +74,8 @@ def main():
     realy = torch.Tensor(dataloader['y_val']).to(args.device) # batch_size*T*N*2
 
     for iter, (x, y) in enumerate(dataloader['val_loader'].get_iterator()):
-        testx = F.dropout3d(torch.Tensor(x).to(args.device),p=args.dropout) # batch*T*N*2
+        testx = torch.Tensor(x).to(args.device) # batch*T*N*2
+        testx[..., 0:1] = F.dropout3d(testx[..., 0:1], p=args.dropout)
         testy=torch.Tensor(y).to(args.device) # batch*outputT*N*2
         with torch.no_grad():
             preds = model(testx.permute(0,2,1,3).contiguous(),testy.permute(0,2,1,3).contiguous(),0).permute(0,2,1).contiguous() # batch*T*N
