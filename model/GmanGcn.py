@@ -10,6 +10,8 @@ from model.AdjLearner import AdjMeta
 from model.NCL import NCL
 from model.NodeNormalWLearner import NodeNormalWLearner
 from model.ECL import ECL
+from model.DLinearLearner import DLinearLearner
+from model.Series_decomp import Series_decomp
 
 
 class GcnAttentionCell(nn.Module):
@@ -17,18 +19,18 @@ class GcnAttentionCell(nn.Module):
         """
         """
         super(GcnAttentionCell, self).__init__()
-        self.temporalAttention=TemMulHeadAtte(N=N, args=args,T=Tin)
+        self.DLinear = DLinear(args=args, N=N, T=Tin)
 
-        self.device=args.device
+        self.device = args.device
         # 设置gate门
-        self.gate = nn.Conv2d(in_channels=2*args.dmodel, out_channels=args.dmodel,
-                              kernel_size=(1, 1), padding=(0,0), stride=(1,1), bias=True)
+        self.gate = nn.Conv2d(in_channels=2 * args.dmodel, out_channels=args.dmodel,
+                              kernel_size=(1, 1), padding=(0, 0), stride=(1, 1), bias=True)
         # 设置图卷积层捕获空间特征
-        self.Gcn=GCN.GCN(Tin=Tin, N=N, args=args)
+        self.Gcn = GCN.GCN(Tin=Tin, N=N, args=args)
         self.dropout = nn.Dropout(p=args.dropout)
         self.batchNormGate = nn.BatchNorm2d(num_features=args.dmodel)
 
-    def forward(self,hidden, matrix, EMC, NMC):
+    def forward(self, hidden, matrix, EMC, NMC):
         """
 
         :param hidden: 此次输入的hidden:batch*N*Tin*dmodel
@@ -36,84 +38,75 @@ class GcnAttentionCell(nn.Module):
         :return:
         """
         # GCN捕获空间依赖
-        gcnOutput=self.Gcn(hidden.permute(0,3,1,2).contiguous(),matrix) # batch*dmodel*N*T
-        gcnOutput=gcnOutput.permute(0,2,3,1).contiguous() # batch*N*T*dmodel
+        gcnOutput = self.Gcn(hidden.permute(0, 3, 1, 2).contiguous(), matrix)  # batch*dmodel*N*T
+        gcnOutput = gcnOutput.permute(0, 2, 3, 1).contiguous()  # batch*N*T*dmodel
 
         # 捕获时间依赖
-
-        key=hidden # batch*N*Tin*dmodel
-
-        query=hidden # batch*N*Tin*dmodel
-
-        value=hidden # batch*N*Tin*dmodel
-
-        # 做attention
-        atten_mask=GcnAttentionCell.generate_square_subsequent_mask(B=query.size(0), N=query.size(1), T=query.size(2)).to(self.device) # batch*N*1*Tq*Ts
-        value,atten=self.temporalAttention.forward(query=query, key=key, value=value, atten_mask=atten_mask, NMC=NMC) # batch*N*T*dmodel
+        value = self.DLinear(NMC=NMC, x=hidden)
 
         # 做gate
-        gcnOutput = gcnOutput.transpose(1, 3) # batch*D*T*N
-        value = value.transpose(1, 3) # batch*D*T*N
-        gateInput=torch.cat([gcnOutput,value],dim=1) # batch*2D*T*N
-        gateInput=self.dropout(self.gate(gateInput)) # batch*D*T*N
-        z=torch.sigmoid(gateInput) # batch*D*T*N
-        finalHidden=z*gcnOutput+(1-z)*value # batch*D*T*N
-        finalHidden = self.batchNormGate(finalHidden) # batch*D*T*N
-        finalHidden = finalHidden.transpose(1, 3) # batch*N*T*D
+        gcnOutput = gcnOutput.transpose(1, 3)  # batch*D*T*N
+        value = value.transpose(1, 3)  # batch*D*T*N
+        gateInput = torch.cat([gcnOutput, value], dim=1)  # batch*2D*T*N
+        gateInput = self.dropout(self.gate(gateInput))  # batch*D*T*N
+        z = torch.sigmoid(gateInput)  # batch*D*T*N
+        finalHidden = z * gcnOutput + (1 - z) * value  # batch*D*T*N
+        finalHidden = self.batchNormGate(finalHidden)  # batch*D*T*N
+        finalHidden = finalHidden.transpose(1, 3)  # batch*N*T*D
 
-        return finalHidden # batch*N*Tin*dmodel
+        return finalHidden  # batch*N*Tin*dmodel
 
     @staticmethod
-    def generate_square_subsequent_mask(B,N,T) -> torch.Tensor:
+    def generate_square_subsequent_mask(B, N, T) -> torch.Tensor:
         """Generates an upper-triangular matrix of -inf, with zeros on diag."""
-        mask_shape=[B,N,1,T,T]
+        mask_shape = [B, N, 1, T, T]
         with torch.no_grad():
             return torch.triu(torch.ones(mask_shape, dtype=torch.bool), diagonal=1)
 
 
 class GcnEncoder(nn.Module):
-    def __init__(self,N,Tin,args):
+    def __init__(self, N, Tin, args):
         super(GcnEncoder, self).__init__()
-        self.encoderBlock=nn.ModuleList()
+        self.encoderBlock = nn.ModuleList()
         self.AdjLearner = AdjMeta(args=args, N=N, T=Tin)
         for i in range(args.encoderBlocks):
             self.encoderBlock.append(GcnAttentionCell(N=N, Tin=Tin, args=args))
 
-        self.device=args.device
-        self.encoderBlocks=args.encoderBlocks
+        self.device = args.device
+        self.encoderBlocks = args.encoderBlocks
 
-        self.xFull=nn.Conv2d(in_channels=2,out_channels=args.dmodel,
-                             kernel_size=(1, 1), padding=(0,0), stride=(1,1), bias=True)
-        self.N=N
+        self.xFull = nn.Conv2d(in_channels=2, out_channels=args.dmodel,
+                               kernel_size=(1, 1), padding=(0, 0), stride=(1, 1), bias=True)
+        self.N = N
 
-    def forward(self,x, NMC, EMC):
+    def forward(self, x, NMC, EMC):
         """
 
         :param x: 流量数据:[batch*N*Tin*2]
         :return:
         """
-        x=self.xFull(x.transpose(1,3)) # batch*D*T*N
-        x = x.transpose(1,3) # batch*N*T*D
+        x = self.xFull(x.transpose(1, 3))  # batch*D*T*N
+        x = x.transpose(1, 3)  # batch*N*T*D
 
-        hidden=x # batch*N*Tin*dmodel
-        skip=0
-        matrix = self.AdjLearner(EMC, NMC) # N*N
+        hidden = x  # batch*N*Tin*dmodel
+        skip = 0
+        matrix = self.AdjLearner(EMC, NMC)  # N*N
         for i in range(self.encoderBlocks):
-            hidden=self.encoderBlock[i].forward(hidden=hidden, matrix=matrix, EMC=EMC, NMC=NMC)
+            hidden = self.encoderBlock[i].forward(hidden=hidden, matrix=matrix, EMC=EMC, NMC=NMC)
             skip = skip + hidden
 
-        return skip+x
+        return skip + x
 
 
 class GcnDecoder(nn.Module):
-    def __init__(self,N,Tout,Tin,args):
+    def __init__(self, N, Tout, Tin, args):
         super(GcnDecoder, self).__init__()
-        self.N=N
-        self.Tin=Tin
-        self.Tout=Tout
+        self.N = N
+        self.Tin = Tin
+        self.Tout = Tout
         self.TinToutWLearner = NodeNormalWLearner(args=args, N=N, in_features=Tin, out_features=Tout)
         self.predictLinear = nn.Conv2d(in_channels=args.dmodel, out_channels=2,
-                                       kernel_size=(1, 1), padding=(0,0), stride=(1,1), bias=True)
+                                       kernel_size=(1, 1), padding=(0, 0), stride=(1, 1), bias=True)
 
         self.decoderBlock = nn.ModuleList()
         self.decoderBlocks = args.decoderBlocks
@@ -123,45 +116,45 @@ class GcnDecoder(nn.Module):
         self.AdjLearner = AdjMeta(args=args, N=N, T=Tout)
         self.dropout = nn.Dropout(p=args.dropout)
 
-    def forward(self,x,NMC,EMC):
+    def forward(self, x, NMC, EMC):
         """
 
         :param x: # batch*N*Tin*dmodel
         :return:
         """
-        TinToutW = self.TinToutWLearner(NMC) # N*Tin*Tout
-        x = torch.einsum("bntd,nto->bnod",(x,TinToutW)) # batch*N*Tout*D
+        TinToutW = self.TinToutWLearner(NMC)  # N*Tin*Tout
+        x = torch.einsum("bntd,nto->bnod", (x, TinToutW))  # batch*N*Tout*D
 
         hidden = x  # batch*N*Tout*dmodel
         skip = 0
-        matrix = self.AdjLearner(EMC=EMC, NMC=NMC) # N*N
+        matrix = self.AdjLearner(EMC=EMC, NMC=NMC)  # N*N
 
         for i in range(self.decoderBlocks):
             hidden = self.decoderBlock[i].forward(hidden=hidden, matrix=matrix, EMC=EMC, NMC=NMC)
-            skip = skip+hidden
-        x=self.dropout(self.predictLinear((x+skip).transpose(1,3))) # batch*2*Tout*N
+            skip = skip + hidden
+        x = self.dropout(self.predictLinear((x + skip).transpose(1, 3)))  # batch*2*Tout*N
 
-        return x.transpose(1, 3) # batch*N*Tout*2
+        return x.transpose(1, 3)  # batch*N*Tout*2
 
 
 class TemMulHeadAtte(nn.Module):
-    def __init__(self,N,args,T):
+    def __init__(self, N, args, T):
         """
         """
         super(TemMulHeadAtte, self).__init__()
-        self.dmodel=args.dmodel
-        self.num_heads=args.head
-        self.dropout=nn.Dropout(p=args.dropout)
-        self.device=args.device
-        self.M=args.M
-        self.N=N
+        self.dmodel = args.dmodel
+        self.num_heads = args.head
+        self.dropout = nn.Dropout(p=args.dropout)
+        self.device = args.device
+        self.M = args.M
+        self.N = N
 
-        d_keys=self.dmodel//self.num_heads
-        d_values=self.dmodel//self.num_heads
+        d_keys = self.dmodel // self.num_heads
+        d_values = self.dmodel // self.num_heads
 
         self.AttentionLearner = KQVLinear(args=args, N=N, T=T)
 
-        self.OutCnn = nn.Conv2d(in_channels=d_values*self.num_heads,out_channels=self.dmodel,kernel_size=(1,1))
+        self.OutCnn = nn.Conv2d(in_channels=d_values * self.num_heads, out_channels=self.dmodel, kernel_size=(1, 1))
         self.LeakeyRelu = nn.LeakyReLU(negative_slope=0.01)
 
     def forward(self, query, key, value, atten_mask, NMC):
@@ -173,65 +166,80 @@ class TemMulHeadAtte(nn.Module):
         :param atten_mask: [batch*N*1*Tq*Ts]
         :return: [batch*N*T*dmodel]
         """
-        B,N,T,E=query.shape
-        H=self.num_heads
+        B, N, T, E = query.shape
+        H = self.num_heads
 
-        Wk,bk,Wq,bq,Wv,bv = self.AttentionLearner(NMC) # (N*dmodel*(dkeys*num_heads)), (N*(dkeys*num_heads))
+        Wk, bk, Wq, bq, Wv, bv = self.AttentionLearner(NMC)  # (N*dmodel*(dkeys*num_heads)), (N*(dkeys*num_heads))
 
-        query = torch.einsum("bnti,nik->bntk",(query,Wq)) # batch*N*T*(dk*heads)
+        query = torch.einsum("bnti,nik->bntk", (query, Wq))  # batch*N*T*(dk*heads)
         query = query.contiguous()
-        query = query+bq.unsqueeze(1).unsqueeze(0) # batch*N*T*(dk*heads)
-        query = query.view(B,N,T,H,-1) # batch*N*T*heads*dkeys
+        query = query + bq.unsqueeze(1).unsqueeze(0)  # batch*N*T*(dk*heads)
+        query = query.view(B, N, T, H, -1)  # batch*N*T*heads*dkeys
 
-        key = torch.einsum("bnti,nik->bntk",(key,Wk)) # batch*N*T*(dk*heads)
+        key = torch.einsum("bnti,nik->bntk", (key, Wk))  # batch*N*T*(dk*heads)
         key = key.contiguous()
-        key = key+bk.unsqueeze(1).unsqueeze(0) # batch*N*T*(dk*heads)
-        key = key.view(B,N,T,H,-1) # batch*N*T*heads*dkeys
+        key = key + bk.unsqueeze(1).unsqueeze(0)  # batch*N*T*(dk*heads)
+        key = key.view(B, N, T, H, -1)  # batch*N*T*heads*dkeys
 
         value = torch.einsum("bnti,nik->bntk", (value, Wv))  # batch*N*T*(dk*heads)
         value = value.contiguous()
-        value = value+bv.unsqueeze(1).unsqueeze(0) # batch*N*T*(dk*heads)
-        value = value.view(B,N,T,H,-1) # batch*N*T*heads*dkeys
+        value = value + bv.unsqueeze(1).unsqueeze(0)  # batch*N*T*(dk*heads)
+        value = value.view(B, N, T, H, -1)  # batch*N*T*heads*dkeys
 
-        scale=1./sqrt(query.size(4))
+        scale = 1. / sqrt(query.size(4))
 
-        scores = self.LeakeyRelu(torch.einsum("bnthe,bnshe->bnhts",(query,key))) # batch*N*head*Tq*Ts
+        scores = self.LeakeyRelu(torch.einsum("bnthe,bnshe->bnhts", (query, key)))  # batch*N*head*Tq*Ts
         scores = scores.contiguous()
         if atten_mask is not None:
-            scores.masked_fill_(atten_mask,-np.inf) # batch*N*head*Tq*Ts
-        scores=torch.softmax(scale*scores,dim=-1)
+            scores.masked_fill_(atten_mask, -np.inf)  # batch*N*head*Tq*Ts
+        scores = torch.softmax(scale * scores, dim=-1)
 
-        value=torch.einsum("bnhts,bnshd->bnthd",(scores,value)) # batch*N*T*heads*d_values
-        value=value.contiguous()
-        value=value.view(B,N,T,-1) # batch*N*T*(heads*d_values)
-        value = self.OutCnn(value.transpose(1, 3)) # batch*D*T*N
+        value = torch.einsum("bnhts,bnshd->bnthd", (scores, value))  # batch*N*T*heads*d_values
+        value = value.contiguous()
+        value = value.view(B, N, T, -1)  # batch*N*T*(heads*d_values)
+        value = self.OutCnn(value.transpose(1, 3))  # batch*D*T*N
 
-        value = F.relu(value).transpose(1, 3) # batch*N*T*D
+        value = F.relu(value).transpose(1, 3)  # batch*N*T*D
 
         # 返回最后的向量和得到的attention分数
-        return value,scores
+        return value, scores
+
+
+class DLinear(nn.Module):
+    def __init__(self, args, N, T):
+        super(DLinear, self).__init__()
+        self.decompsition = Series_decomp(kernel_size=args.kernel_size)
+        self.DLinearLearner = DLinearLearner(args, N, T)
+
+    def forward(self, NMC, x):
+        """
+        x B*N*T*D
+        """
+        B, N, T, D = x.shape
+        x = x.view(B * N, T, D).contiguous()
+        seasonal_x, trend_x = self.decompsition(x)  # BN*T*D
+        seasonal_x = seasonal_x.view(B, N, T, D).contiguous()
+        trend_x = trend_x.view(B, N, T, D).contiguous()  # B*N*T*D
+        WSeasonal, WTrend = self.DLinearLearner(NMC)  # N*T*T
+        seasonal_x = torch.einsum("bnid,nit->bntd", (seasonal_x, WSeasonal))  # B*N*T*D
+        trend_x = torch.einsum("bnid,nit->bntd", (trend_x, WTrend))  # B*N*T*D
+        return seasonal_x + trend_x  # B*N*T*D
 
 
 class GcnAtteNet(nn.Module):
     def __init__(self, N, Tin, Tout, args, NC, EC):
         super(GcnAtteNet, self).__init__()
         self.N = N
-        self.GcnEncoder=GcnEncoder(N=N,Tin=Tin,args=args)
-        self.GcnDecoder=GcnDecoder(N=N,Tout=Tout,Tin=Tin,args=args)
+        self.GcnEncoder = GcnEncoder(N=N, Tin=Tin, args=args)
+        self.GcnDecoder = GcnDecoder(N=N, Tout=Tout, Tin=Tin, args=args)
         self.NC = NC
         self.EC = EC
-        self.NCL = NCL(args,N)
+        self.NCL = NCL(args, N)
         self.ECL = ECL(args=args, N=N)
 
-    def forward(self,X):
-        NMC = self.NCL(self.NC) # N*D
-        EMC = self.ECL(self.EC) # 1*D*N*N
+    def forward(self, X):
+        NMC = self.NCL(self.NC)  # N*D
+        EMC = self.ECL(self.EC)  # 1*D*N*N
         output = self.GcnEncoder(X, NMC=NMC, EMC=EMC)  # batch*N*Tin*dmodel
         result = self.GcnDecoder(output, NMC=NMC, EMC=EMC)  # batch*N*Tout*2
         return result
-
-
-
-
-
-

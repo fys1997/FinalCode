@@ -25,6 +25,7 @@ parser.add_argument('--preTrain',type=bool,default=False,help='whether use preTr
 parser.add_argument('--seed',type=int,default=3407,help='random seed')
 parser.add_argument('--clip',type=int,default=5,help='gradient norm clip')
 parser.add_argument('--decoderBlocks',type=int,default=2,help='decoder block number')
+parser.add_argument('--kernel_size', type=int, default=3,help="DLinear Kernel size")
 
 args=parser.parse_args()
 
