@@ -32,7 +32,7 @@ parser.add_argument('--onlyEC', type=bool, default=False, help="only EMC used in
 parser.add_argument('--onlyAdp', type=bool, default=False, help="only Adp use in adj")
 parser.add_argument('--normalTA', type=bool, default=False, help="normal attention or meta Attention")
 parser.add_argument('--Conv_bool', type=bool, default=True, help="Converge Time ")
-parser.add_argument('--ConvTxt', type=str, default='ConvTxt/metr-Conv.txt', help="store the converge time")
+parser.add_argument('--ConvTxt', type=str, default='ConvTxt/metr.txt', help="store the converge time")
 
 
 args=parser.parse_args()
