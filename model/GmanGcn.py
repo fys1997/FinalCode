@@ -216,10 +216,10 @@ class DLinear(nn.Module):
         x B*N*T*D
         """
         B, N, T, D = x.shape
-        x = x.view(B * N, T, D).contiguous()
+        x = x.contiguous().view(B * N, T, D).contiguous()
         seasonal_x, trend_x = self.decompsition(x)  # BN*T*D
-        seasonal_x = seasonal_x.view(B, N, T, D).contiguous()
-        trend_x = trend_x.view(B, N, T, D).contiguous()  # B*N*T*D
+        seasonal_x = seasonal_x.contiguous().view(B, N, T, D).contiguous()
+        trend_x = trend_x.contiguous().view(B, N, T, D).contiguous()  # B*N*T*D
         WSeasonal, WTrend = self.DLinearLearner(NMC)  # N*T*T
         seasonal_x = torch.einsum("bnid,nit->bntd", (seasonal_x, WSeasonal))  # B*N*T*D
         trend_x = torch.einsum("bnid,nit->bntd", (trend_x, WTrend))  # B*N*T*D
